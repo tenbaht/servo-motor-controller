@@ -1,0 +1,29 @@
+Features of SMC3
+
+ o Using Only a Cheap ATtiny2313 Microcontroller
+ o Controlled in Serial Command via UART
+   - Direct Access to Position Command Register
+   - G0/G1 Motion Generation
+ o Three Control Modes
+   - Absolute Positioning Mode
+   - Constant Speed Mode
+   - Constant Torque Mode
+ o Software Decoding of Quadrature Encoder Input
+   - Count rate over 100,000 counts/sec in quadrature decoding
+   - No External Component Required
+ o Two PWM Outputs for H-bridge Driver
+ o Three Diagnostic Outputs
+   - Ready, Torque Limit and Servo Error
+ o On-the-Fly Servo Tuning
+
+
+Changes from SMC to SMC3
+
+ o Removed Pulsed Input
+ o Added Diagnostic Outputs
+   - Ready: Servo control is running.
+   - Torque Limit: Torque limit indicator for mode 2/3.
+   - Servo Error: Servo error occured and enterd to mode 0. M command or
+     reset can restart servo.
+
+ 

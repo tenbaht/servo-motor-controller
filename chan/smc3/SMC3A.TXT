@@ -1,0 +1,33 @@
+Features of SMC3A
+
+ o Using Only a Cheap ATtiny2313 Microcontroller
+ o Optimized for Replacement of Stepping Motors
+   - Pulse/Dir Command Input with Pulse Multiplyer
+   - Pulse rate over 100,000 pulses/sec
+   - Gear ratio from 1/256 to 255 in 1/256 step
+ o Three Control Modes
+   - Relative Positioning Mode
+   - Constant Speed Mode
+   - Constant Torque Mode
+ o Software Decoding of Quadrature Encoder Input
+   - Count rate over 100,000 counts/sec in quadrature decoding
+   - No External Component is Required
+ o Two PWM Outputs for H-bridge Driver
+ o Three Diagnostic Outputs
+   - Ready, Torque Limit and Servo Error
+ o On-the-Fly Servo Tuning
+
+
+Changes from SMC to SMC3A
+
+ o Removed G0/G1 Commands
+ o Added +/- Commands
+   - {+|-}<value>: Increase/Decrease command counter.
+ o Extened Pulsed Input Function
+   - Pulse Multiplyer: Gear ratio (8.8 fixed-point) can be set with parameter
+     #6, 256 means 1.0. Parameter #7 has no effect.
+ o Added Diagnostic Outputs
+   - Ready: Servo control is running.
+   - Torque Limit: Torque limit indicator for mode 2/3.
+   - Servo Error: Servo error occured and enterd to mode 0. M command or
+     reset can restart servo.
