@@ -1,8 +1,7 @@
 ;------------------------------------------------;
 ; Constants
 
-.equ	RAMTOP = 0x60		; SRAM top address
-.equ	RAMTOP100 = 0x100	; For memory mapped I/O devices
+.equ	RAMTOP = SRAM_START	; SRAM top address
 
 
 .equ	bit0	= 0b00000001
@@ -104,13 +103,23 @@
 .endm
 
 .macro	inw
+.if @0L < 0x20
 	in	@0L,@1L
 	in	@0H,@1H
+.else
+	lds	@0L,@1L
+	lds	@0H,@1L
+.endif
 .endm
 
 .macro	outw
+.if @0L < 0x20
 	out	@0H,@1H
 	out	@0L,@1L
+.else
+	sts	@0H,@1H
+	sts	@0L,@1L
+.endif
 .endm
 
 
@@ -276,8 +285,13 @@
 ;	outi	port,var
 
 .macro	outi
+.if @0 < 0x20
 	ldi	r16,@1
 	out	@0,r16
+.else
+	ldi	r16,@1
+	sts	@0,r16
+.endif
 .endm
 
 

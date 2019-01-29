@@ -3,8 +3,10 @@
 ;----------------------------------------------------------------------------;
 ;
 
-.include "tn2313def.inc"
+.nolist
+.include "m328Pdef.inc"
 .include "avr.inc"
+.list
 
 
 .equ	SYSCLK	= 16000000	;System clock
@@ -21,6 +23,36 @@
 .def	_CtDiv	= r9	;1/83 divider
 
 .def	_Flags	= r25	; 1kHz|Sat.F|Sat.R| | | |
+
+
+;----------------------------------------------------------;
+; compatibility definitions for devices with different register names
+
+; eeprom: bigger devices have 16 bit offset register
+.ifndef EEAR
+.equ	EEAR	= EEARL
+.endif
+
+; uart: use UART0
+.ifndef UDR
+.equ	UBRRL	= UBRR0L
+.equ	UBRRH	= UBRR0H
+.equ	UCSRA	= UCSR0A
+.equ	UCSRB	= UCSR0B
+.equ	UDR	= UDR0
+.equ	UDRE	= UDRE0
+.equ	RXCIE	= RXCIE0
+.endif
+
+; USI: use SPI instead
+.ifndef USIDR
+.equ	USIDR	= SPDR0
+.endif
+
+; timer
+.ifndef TIMSK
+.equ	TIMSK	= TIMSK0
+.endif
 
 
 ;----------------------------------------------------------;
@@ -99,6 +131,9 @@ LineBuf:.byte	20	; Command line input buffer
 ; Program code
 
 .cseg
+.org 0
+
+.ifdef _TN2313DEF_INC_
 	; Interrupt Vectors (ATtiny2313)
 	rjmp	reset		;Reset
 	rjmp	0		;INT0
@@ -119,6 +154,29 @@ LineBuf:.byte	20	; Command line input buffer
 ;	rjmp	0		;USI OVF
 ;	rjmp	0		;EEPROM
 ;	rjmp	0		;WDT
+
+
+.elif FLASHEND < 0x1000
+	; Interrupt Vectors (for all AVR with up to 4kB flash, use rjmp)
+	rjmp	reset		;Reset
+.org OC0Aaddr
+	rjmp	background	;TC0 COMPA
+.org URXCaddr
+	rjmp	rxint		;USART0 Rx ready
+.org INT_VECTORS_SIZE
+				; leave the rest of the table empty
+
+.else
+	; Interrupt Vectors (for all AVR with more than 4kB flash, use jmp)
+	jmp	reset		;Reset
+.org OC0Aaddr
+	jmp	background	;TC0 COMPA
+.org URXCaddr
+	jmp	rxint		;USART0 Rx ready
+.org INT_VECTORS_SIZE
+				; leave the rest of the table empty
+
+.endif
 
 
 reset:
@@ -148,9 +206,12 @@ reset:
 	outi	OCR0A, 2		;TC0: 83kHz interval timer
 	outi	TCCR0A, 0b00000010	;
 	outi	TCCR0B, 0b00000011	;
-	outi	TIMSK,  0b00000001	;/
-
+	outi	TIMSK, (1<<OCIE0A)	;/
+.ifdef USICR
 	outi	USICR, 0b00011100	;USI: LED display
+.else
+	;FIXME: initialize 3-wire SPI instead
+.endif
 
 	ldi	_Flags, 0
 
@@ -264,15 +325,15 @@ do_weep:	; Save parameters into EEPROM
 	cpi	AL, (EEPROMEND+1)/N_PARM/2
 	brcc	cmd_err
 	 rcall	get_eeadr
-	sbic	EECR, EEWE
+	sbic	EECR, EEPE
 	rjmp	PC-1
 	out	EEAR, BH
 	inc	BH
 	ld	AL, Y+
 	out	EEDR, AL
 	cli
-	sbi	EECR, EEMWE
-	sbi	EECR, EEWE
+	sbi	EECR, EEMPE
+	sbi	EECR, EEPE
 	sei
 	dec	AH
 	brne	PC-11
@@ -711,8 +772,13 @@ tap_voltage:
 	adc	AL, T0L		;
 	ldi	AH, 120		;
 	sub	AH, T0L		;
+.if OCR1AL < 0x20
 	out	OCR1AL, AL	;
 	out	OCR1BL, AH	;/
+.else
+	sts	OCR1AL, AL	;
+	sts	OCR1BL, AH	;/
+.endif
 
 	 rcall	disp_pos
 
@@ -786,7 +852,7 @@ dp_l2:	lsl	AL
 	brne	dp_l1
 	st	Y+,CH
 	clr	CH
-	cpi	YL,Disp+8
+	cpi	YL,low(Disp+8)
 	brne	PC-3
 	clr	DL
 
@@ -1008,10 +1074,22 @@ dp_dec:	ldi	CH,' '
 
 	; Transmit AL.
 echo:
-xmit:	sbis	UCSRA, UDRE
+xmit:
+.if UDR < 0x20
+	sbis	UCSRA, UDRE
 	rjmp	PC-1
 	out	UDR, AL
 	ret
+.else
+	push	AH		; not sure if AH is really important.
+s01:
+	lds	AH, UCSRA
+	sbrs	AH, UDRE
+	rjmp	s01
+	sts	UDR, AL
+	pop	AH
+	ret
+.endif
 
 receive:; Receive a char into AL. (ZR=no data)
 	push	AH
@@ -1038,10 +1116,18 @@ rxint:	;USART0 Rx ready
 	push	AL
 	in	AL, SREG
 	push	BL
+	pushw	A
+.if UCSRB < 0x20
 	in	BL, UDR
 	cbi	UCSRB, RXCIE
+.else
+	lds	BL, UDR
+	lds	AL, UCSRB
+	andi	AL, low(~(1<<RXCIE))
+	sts	UCSRB, AL
+.endif
 	sei
-	pushw	A
+;	pushw	A		; moved to an earlier position
 	pushw	Y
 	ldiw	Y, RxBuf
 	ldd	AL, Y+0
@@ -1059,9 +1145,17 @@ rxint:	;USART0 Rx ready
 	popw	A
 	pop	BL
 	out	SREG, AL
+.if UCSRB < 0x20
 	pop	AL
 	cli
 	sbi	UCSRB, RXCIE
+.else
+	cli
+	lds	AL, UCSRB
+	ori	AL, (1<<RXCIE)
+	sts	UCSRB, AL
+	pop	AL
+.endif
 	reti
 
 
