@@ -133,7 +133,7 @@ LineBuf:.byte	20	; Command line input buffer
 .cseg
 .org 0
 
-.ifdef _TN2313DEF_INC_
+.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
 	; Interrupt Vectors (ATtiny2313)
 	rjmp	reset		;Reset
 	rjmp	0		;INT0
@@ -156,7 +156,7 @@ LineBuf:.byte	20	; Command line input buffer
 ;	rjmp	0		;WDT
 
 
-.elif FLASHEND < 0x1000
+.elif __FLASH_SIZE__ <= 0x1000
 	; Interrupt Vectors (for all AVR with up to 4kB flash, use rjmp)
 	rjmp	reset		;Reset
 .org OC0Aaddr
@@ -652,7 +652,7 @@ enc_zr:
 	pushw	Y
 	ldiw	Y, Parms	;Work area base pointer
 
-	sbr	_Flags, bit7	; 1kHz inerrupt flag
+	sbr	_Flags, bit7	; 1kHz interrupt flag
 
 	lddw	T2, Y+iPvPos	;Detect velocity
 	cli			;
@@ -772,7 +772,7 @@ tap_voltage:
 	adc	AL, T0L		;
 	ldi	AH, 120		;
 	sub	AH, T0L		;
-.if OCR1AL < 0x20
+.if OCR1AL < 0x40
 	out	OCR1AL, AL	;
 	out	OCR1BL, AH	;/
 .else
@@ -1075,7 +1075,7 @@ dp_dec:	ldi	CH,' '
 	; Transmit AL.
 echo:
 xmit:
-.if UDR < 0x20
+.if UDR < 0x40
 	sbis	UCSRA, UDRE
 	rjmp	PC-1
 	out	UDR, AL
@@ -1117,7 +1117,7 @@ rxint:	;USART0 Rx ready
 	in	AL, SREG
 	push	BL
 	pushw	A
-.if UCSRB < 0x20
+.if UCSRB < 0x40
 	in	BL, UDR
 	cbi	UCSRB, RXCIE
 .else
@@ -1145,7 +1145,7 @@ rxint:	;USART0 Rx ready
 	popw	A
 	pop	BL
 	out	SREG, AL
-.if UCSRB < 0x20
+.if UCSRB < 0x40
 	pop	AL
 	cli
 	sbi	UCSRB, RXCIE

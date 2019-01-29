@@ -80,7 +80,7 @@ Changes from SMC to SMC3A
  o Added +/- Commands
    - {+|-}<value>: Increase/Decrease command counter.
  o Extened Pulsed Input Function
-   - Pulse Multiplyer: Gear ratio (8.8 fixed-point) can be set with parameter
+   - Pulse Multiplier: Gear ratio (8.8 fixed-point) can be set with parameter
      #6, 256 means 1.0. Parameter #7 has no effect.
  o Added Diagnostic Outputs
    - Ready: Servo control is running.
@@ -90,10 +90,33 @@ Changes from SMC to SMC3A
  
 
 
+## Wiring
+
+Signal		|Pin ATtiny2313	|Pin m328	|Arduino Uno pin number
+------		|--------	|-----------	|---------
+Enc_A		|PD5/T1		|PD5/T1		|5
+Enc_B		|PD4/T0		|PD4/T0		|4
+Enc_Z		|PD3/INT1	|PD3/INT1	|3
+nSTEP		|PD2/INT0	|PD2/INT0	|2
+DIR		|PD6		|PD6/OC0A	|6
+TxD		|PD1/TXD	|PD1/TXD	|1
+RxD		|PD0/RXD	|PD0/RXD	|0
+SCK		|PB7/SCK	| PB5/SCK	|13
+MISO		|PB6/MISO	| PB4/MISO	|12
+MOSI		|PB5/MOSI	| PB3/MOSI	|11
+Mot_n		|PB4/OC1B	| PB2/OC1B	|10
+Mot_p		|PB3/OC1A	| PB1/OC1A	|9
+LED_Ready	|PB2/OC0A	|		|
+LED_TorqueLimit	|PB1		|		|
+LED_ServoError	|PB0		|PB0		|8 (flexible)
+RESn		|PA2/RES	|PC6/RES	|
+Xtal2		|PA1/X2		|		|
+Xtal1		|PA0/X1		|		|
+
 
 ## CPU
 
-The AT90S2313 got replaced by the ATtiny2313 a long time ago. They are very
+The AT90S2313 got replaced by the ATtiny2313 a long time ago. Both are very
 similar, only some register names changed slightly and the interrupt table
 got a little bigger. See Atmel/Microchip AVR091 for details on migration.
 
@@ -110,3 +133,6 @@ availability):
 [ATtiny2313 data sheet](http://ww1.microchip.com/downloads/en/DeviceDoc/doc8246.pdf)
 
 AVR091 Replacing AT90S2313 by ATtiny2313.pdf
+
+[AVR Assember user guide](http://ww1.microchip.com/downloads/en/devicedoc/40001917a.pdf)
+(was known as Atmel doc1022 before the merger with Microchip)

@@ -103,7 +103,7 @@
 .endm
 
 .macro	inw
-.if @0L < 0x20
+.if @0L < 0x40
 	in	@0L,@1L
 	in	@0H,@1H
 .else
@@ -113,7 +113,7 @@
 .endm
 
 .macro	outw
-.if @0L < 0x20
+.if @0L < 0x40
 	out	@0H,@1H
 	out	@0L,@1L
 .else
@@ -285,7 +285,7 @@
 ;	outi	port,var
 
 .macro	outi
-.if @0 < 0x20
+.if @0 < 0x40
 	ldi	r16,@1
 	out	@0,r16
 .else
