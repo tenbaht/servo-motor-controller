@@ -1,6 +1,8 @@
 This work is based on the DC Servomotor Controller by Elm Chan:
 http://elm-chan.org/works/smc/report_e.html
 
+## Files in this repository
+
 The original archives are unpacked into chan/smc and chan/smc3.
 
 chan/smc/smc.asm: v0.2 of the motor controller (AT90S2313)
@@ -13,6 +15,15 @@ stepper-like dir/step input and no LED display.
 
 chan/smc3/SMC3A.ASM: v0.3a, ATtiny2313. Supports the stepper-like dir/step
 interface, but no serial interface and no LED display.
+
+
+## Compiling
+
+Chan wrote his files for the orignal AVR assembler. The open source
+alternative [avra](http://avra.sourceforge.net/) can be used as well:
+
+	avra -I /usr/share/avra smc3.asm
+
 
 
 ## Features of SMC3
@@ -77,6 +88,8 @@ Changes from SMC to SMC3A
    - Servo Error: Servo error occured and enterd to mode 0. M command or
      reset can restart servo.
  
+
+
 
 ## CPU
 

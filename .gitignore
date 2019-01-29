@@ -1,4 +1,10 @@
 # backup files
 *~
 *.bak
-
+# assember generated files
+build/
+*.cof
+*.hex
+*.lst
+*.map
+*.obj
