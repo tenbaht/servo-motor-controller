@@ -11,7 +11,8 @@ chan/smc/smc2.asm: v0.2 of the motor controller with position display on a
 7-segment display connected via SPI to the ISP connector. (AT90S2313)
 
 chan/smc3/SMC3.ASM: v0.3, ATtiny2313. Supports serial interface, but not the
-stepper-like dir/step input and no LED display.
+stepper-like dir/step input and no LED display. 'E' command not implemented,
+echo always on.
 
 chan/smc3/SMC3A.ASM: v0.3a, ATtiny2313. Supports the stepper-like dir/step
 interface, but no serial interface and no LED display.
@@ -40,6 +41,7 @@ alternative [avra](http://avra.sourceforge.net/) can be used as well:
    - Count rate over 100,000 counts/sec in quadrature decoding
    - No External Component Required
  o Two PWM Outputs for H-bridge Driver
+ o Supports bootstrap type FET driver (minimum duty ratio 15/16)
  o Three Diagnostic Outputs
    - Ready, Torque Limit and Servo Error
  o On-the-Fly Servo Tuning
@@ -69,6 +71,7 @@ Changes from SMC to SMC3
    - Count rate over 100,000 counts/sec in quadrature decoding
    - No External Component is Required
  o Two PWM Outputs for H-bridge Driver
+ o Supports bootstrap type FET driver (minimum duty ratio 15/16)
  o Three Diagnostic Outputs
    - Ready, Torque Limit and Servo Error
  o On-the-Fly Servo Tuning
@@ -101,17 +104,33 @@ nSTEP		|PD2/INT0	|PD2/INT0	|2
 DIR		|PD6		|PD6/OC0A	|6
 TxD		|PD1/TXD	|PD1/TXD	|1
 RxD		|PD0/RXD	|PD0/RXD	|0
-SCK		|PB7/SCK	| PB5/SCK	|13
-MISO		|PB6/MISO	| PB4/MISO	|12
-MOSI		|PB5/MOSI	| PB3/MOSI	|11
+SCK (Clk)	|PB7/SCK/USCK	| PB5/SCK	|13
+MISO (SegData)	|PB6/MISO/DO	| PB3/MOSI	|11 (intentionally swopped)
+MOSI (DigitClk)	|PB5/MOSI/DI	| PB4/MISO	|12 (intentionally swopped)
 Mot_n		|PB4/OC1B	| PB2/OC1B	|10
 Mot_p		|PB3/OC1A	| PB1/OC1A	|9
-LED_Ready	|PB2/OC0A	|		|
-LED_TorqueLimit	|PB1		|		|
+LED_Ready	|PB2/OC0A	|PC2		|16 (flexible)
+LED_TorqueLimit	|PB1		|PC3		|17 (flexible)
 LED_ServoError	|PB0		|PB0		|8 (flexible)
 RESn		|PA2/RES	|PC6/RES	|
 Xtal2		|PA1/X2		|		|
 Xtal1		|PA0/X1		|		|
+
+
+## Position display
+
+The current position is displayed on an optional 7-segment display with 8
+digits. This display is unfortunatly not compatible with the cheap serial
+LED modules you can find on Aliexpress.
+
+It is attached to the SPI pins and uses an unusual serial protocol. SCK is
+the clock signal, the segment data is shifted out on MISO. Yes, no typo.
+MISO is used as an output. After 8 clock pulses one pulse on MOSI (finally)
+advances to the next digit. Checkout the schematic on [Chan Elm's
+page](http://elm-chan.org/docs/avr/avrisp.html) for details.
+
+Since this is not an off-the-shelf standard display anyway I swopped these
+two pins for the Arduino pin definition. This allows to use the builtin SPI.
 
 
 ## CPU
@@ -136,3 +155,14 @@ AVR091 Replacing AT90S2313 by ATtiny2313.pdf
 
 [AVR Assember user guide](http://ww1.microchip.com/downloads/en/devicedoc/40001917a.pdf)
 (was known as Atmel doc1022 before the merger with Microchip)
+
+Theory of sensorless speed control of brushed DC motors: [AB-026 :
+Sensorless Speed Stabiliser for a DC
+Motor](https://www.precisionmicrodrives.com/content/ab-026-sensorless-speed-stabiliser-for-a-dc-motor/)
+by Precision Microdrives.
+
+
+## Licence
+
+The original work was released under the [Creative Commons Attribution 3.0 Unported]
+(https://creativecommons.org/licenses/by/3.0/) (CC-BY 3.0) by Elm Chan.

@@ -44,15 +44,44 @@
 .equ	RXCIE	= RXCIE0
 .endif
 
-; USI: use SPI instead
-.ifndef USIDR
-.equ	USIDR	= SPDR0
-.endif
-
 ; timer
 .ifndef TIMSK
 .equ	TIMSK	= TIMSK0
 .endif
+
+
+;----------------------------------------------------------;
+; define LED pin mappings for different devices
+
+.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
+.equ	LED_ERROR_BIT	= 0
+.equ	LED_ERROR_PORT	= PORTB
+.equ	LED_TORQUE_BIT	= 1
+.equ	LED_TORQUE_PORT	= PORTB
+.equ	LED_READY_BIT	= 2
+.equ	LED_READY_PORT	= PORTB
+
+.elif (__DEVICE__ == __ATmega328P__)
+.equ	LED_ERROR_BIT	= 0
+.equ	LED_ERROR_PORT	= PORTB
+.equ	LED_TORQUE_BIT	= 3
+.equ	LED_TORQUE_PORT	= PORTC
+.equ	LED_READY_BIT	= 2
+.equ	LED_READY_PORT	= PORTC
+
+.else
+.error "no LED pin definiton found for this device"
+
+.endif
+
+.macro	led_on
+	sbi	@0_PORT, @0_BIT	; LED on
+.endm
+
+.macro	led_off
+	cbi	@0_PORT, @0_BIT	; LED off
+.endm
+
 
 
 ;----------------------------------------------------------;
@@ -190,8 +219,16 @@ reset:
 	outi	PORTD, 0b01111111	;Initialize PORTD
 	outi	DDRD,  0b00000010	;/
 
+.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
 	outi	PORTB, 0b10000000	;Initialize PORTB
 	outi	DDRB,  0b11111111	;/
+.elif (__DEVICE__ == __ATmega328P__)
+	outi	PORTB, 0b00100000	;Initialize PORTB
+	outi	DDRB,  0b11111111	;/
+
+	out	PORTC, _0		;Initialize PORTC
+	outi	DDRC,  0b00001100	;/
+.endif
 
 	ldiw	A, SYSCLK/16/BPS-1	;UART
 	outw	UBRR, A			;
@@ -594,9 +631,9 @@ init_servo:
 	clrw	_Pos		;Clear position counter
 	clr	_PosX		;/
 	sei
-	cbi	PORTB, 0	;Error LED off
-	cbi	PORTB, 1	;Torque LED off
-	sbi	PORTB, 2	;Ready LED on
+	led_off	LED_ERROR	;Error LED off
+	led_off	LED_TORQUE	;Torque LED off
+	led_on	LED_READY	;Ready LED on
 	ret
 
 
@@ -737,10 +774,10 @@ tap_velocity:
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
 	lddw	A, Y+iOvTmr	; works, decreased by 1 when no torque limit.
 	breq	PC+5		; When the value reaches TL_TIME, servo turns
-	sbi	PORTB, 1	; off and goes error state.
+	led_on	LED_TORQUE	; off and goes error state.
 	addiw	A, 3		;
 	rjmp	PC+5		;
-	cbi	PORTB, 1	;
+	led_off	LED_TORQUE	;
 	subiw	A, 1		;
 	brcs	PC+8		;
 	stdw	Y+iOvTmr, A	;
@@ -800,7 +837,7 @@ bgnd_exit:			;End of encoder capture and servo operation
 servo_error:
 	clr	AL		;Enter Mode0
 	 rcall	init_servo	;/
-	sbi	PORTB, 0	;Error LED on
+	led_on	LED_ERROR	;Error LED on
 	clrw	T0		;Output off
 	rjmp	tap_voltage
 
@@ -856,6 +893,12 @@ dp_l2:	lsl	AL
 	brne	PC-3
 	clr	DL
 
+.ifdef USIDR
+; This code uses the USI device of the tiny2313.
+; - write data to USIDR
+; - double-toggle USCK 8 times to shift out the data
+; - write 0x80 to USIDR to set DO to high
+; - toggle DI to advance to the next digit.
 dp_out:	ldiw	Y,Disp
 	std	Y+8,DL
 	add	YL,DL
@@ -876,7 +919,11 @@ dp_out:	ldiw	Y,Disp
 	sbi	PORTB,5
 	cbi	PORTB,5
 	ret
-
+.else
+;FIXME: add SPI code for ATmega.
+dp_out:
+	ret
+.endif
 
 
 
