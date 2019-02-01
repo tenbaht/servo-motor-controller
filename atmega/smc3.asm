@@ -70,7 +70,7 @@
 .equ	LED_READY_PORT	= PORTC
 
 .else
-.error "no LED pin definiton found for this device"
+.error "no LED pin definition found for this device"
 
 .endif
 
@@ -271,9 +271,9 @@ main:
 	 rcall	get_line	;Get a command line
 	ld	BH,X+		;BH = command char
 	cpi	BH,'a'		;CAPS
-	brcs	PC+2		;
+	brcs	b01		;
 	subi	BH,0x20		;/
-	cpi	BH,' '		;Null line ?
+b01:	cpi	BH,' '		;Null line ?
 	brlt	main		;
 	cpi	BH,'J'		;Jump?
 	rjeq	do_jump		;
@@ -715,19 +715,19 @@ tap_position:
 	ldd	BH, Y+iCtPos+2	;
 	subw	T0, _Pos	;
 	sbc	BH, _PosX	;
-	sei			;BL:T0 = position error
+	sei			;BH:T0 = position error
 
 	lddw	A, Y+iLimSpd	;Velocity limit (P0)
 	clr	BL		;
 	cpw	T0, A		;
 	cpc	BH, BL		;
-	brge	PC+10		;
+	brge	b10		;
 	negw	A		;
 	com	BL		;
 	cpw	T0, A		;
 	cpc	BH, BL		;
-	brge	PC+2		;
-	movw	T0L, AL		;T0 = velocity command
+	brge	tap_velocity	;
+b10:	movw	T0L, AL		;T0 = velocity command
 
 
 tap_velocity:
@@ -749,43 +749,43 @@ tap_velocity:
 	cbr	_Flags, bit6+bit5;Torque limit (P4)
 	lddw	B, Y+iLimTrq	;
 	cpw	Z, B		;
-	brlt	PC+3		;
+	brlt	b20		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit6	;
-	neg	BL		;
+b20:	neg	BL		;
 	com	BH		;
 	cpw	Z, B		;
-	brge	PC+3		;
+	brge	b21		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit5	;/
 
-	tst	T0H		;PvInt += T0, with anti-windup
-	brmi	PC+4		;
+b21:	tst	T0H		;PvInt += T0, with anti-windup
+	brmi	b22		;
 	sbrc	_Flags, 6	;
-	rjmp	PC+10		;
-	rjmp	PC+3		;
-	sbrc	_Flags, 5	;
-	rjmp	PC+7		;
-	lddw	A, Y+iPvInt	;
+	rjmp	b24		;
+	rjmp	b23		;
+b22:	sbrc	_Flags, 5	;
+	rjmp	b24		;
+b23:	lddw	A, Y+iPvInt	;
 	addw	A, T0		;
 	stdw	Y+iPvInt, A	;/
 
-	mov	AL, _Flags	;Check torque limiter timer
+b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
 	lddw	A, Y+iOvTmr	; works, decreased by 1 when no torque limit.
-	breq	PC+5		; When the value reaches TL_TIME, servo turns
+	breq	b25		; When the value reaches TL_TIME, servo turns
 	led_on	LED_TORQUE	; off and goes error state.
 	addiw	A, 3		;
-	rjmp	PC+5		;
-	led_off	LED_TORQUE	;
+	rjmp	b26		;
+b25:	led_off	LED_TORQUE	;
 	subiw	A, 1		;
-	brcs	PC+8		;
-	stdw	Y+iOvTmr, A	;
+	brlo	b27		;
+b26:	stdw	Y+iOvTmr, A	;
 	ldiw	B, TL_TIME	;
 	cpw	A, B		;
-	brcc	servo_error	;/
+	brsh	servo_error	;/
 
-	movw	T0L, ZL		;T0 = torque command
+b27:	movw	T0L, ZL		;T0 = torque command
 
 
 tap_torque:
@@ -798,13 +798,13 @@ tap_torque:
 tap_voltage:
 	ldiw	A, 240		;Clip output voltage between -240 and +240.
 	cpw	T0, A		; Limit minimum duty ratio to 15/16 for bootstrap
-	brge	PC+6		; type FET driver.
+	brge	b30		; type FET driver.
 	ldiw	A, -240		;
 	cpw	T0, A		;
-	brge	PC+2		;
-	movw	T0L, AL		;T0 = PWM command
+	brge	b31		;
+b30:	movw	T0L, AL		;T0 = PWM command
 
-	asrw	T0		;Set PWM register (OCR1A and ~OCR1B)
+b31:	asrw	T0		;Set PWM register (OCR1A and ~OCR1B)
 	ldi	AL, 120		;
 	adc	AL, T0L		;
 	ldi	AH, 120		;
@@ -968,21 +968,21 @@ get_line:
 	ldiw	X,LineBuf
 	ldi	BH,0
 rl_lp:	 rcall	receive
-	breq	PC-1
+	breq	rl_lp
 	st	X,AL
 	cpi	AL,0x0d	; CR
-	brne	PC+4
+	brne	b80
 	ldiw	X,LineBuf
 	rjmp	echo
-	cpi	AL,0x08	; BS
-	brne	PC+7
+b80:	cpi	AL,0x08	; BS
+	brne	b81
 	cpi	BH,0
 	breq	rl_lp
 	 rcall	echo
 	sbiw	XL,1
 	dec	BH
 	rjmp	rl_lp
-	cpi	AL,' '		; SP
+b81:	cpi	AL,' '		; SP
 	brcs	rl_lp
 	cpi	BH,20-1
 	breq	rl_lp
