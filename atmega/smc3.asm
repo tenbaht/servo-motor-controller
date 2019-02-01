@@ -100,7 +100,7 @@
 	; Memory bank 3 : Matsushita Electric MCN-14EAEC (6V, 40p/r)
 	.dw	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64
 
-.equ	N_PARM = 8	; Number of parameter words par bank.
+.equ	N_PARM = 8	; Number of parameter words per bank.
 
 
 
@@ -444,9 +444,9 @@ do_jump:
 
 do_go:
 	ldiw	Z, CtPos	;Z -> Position command reg.
-	lddw	T4, Z+0		;T6L:T4 = start posision
+	lddw	T4, Z+0		;T6L:T4 = start position
 	ldd	T6L, Z+2	;/
-	mov	T0H, T4L	;r3:r0 = commanded posision
+	mov	T0H, T4L	;r3:r0 = commanded position
 	mov	T2L, T4H	;
 	mov	T2H, T6L	;/
 	 rcall	get_val		;sub command
@@ -458,7 +458,7 @@ do_go:
 	rjmp	cmd_err
 
 ; Rectanguler velocity profile
-dg_1:	 rcall	get_val		;BL:AL = target posision
+dg_1:	 rcall	get_val		;BL:AL = target position
 	rjeq	cmd_err		;/
 	pushw	A
 	push	BL
