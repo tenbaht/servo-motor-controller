@@ -427,6 +427,9 @@ dp_p:	ldi	AL, 0x0d	;Show position counter
 ;------------------------------------------------;
 ; Change position command reg. immediataly.
 
+; if (!get_val()) goto cmd_err;
+; CtPos = val;
+; goto main;
 do_jump:
 	 rcall	get_val
 	rjeq	cmd_err
@@ -441,7 +444,24 @@ do_jump:
 
 ;------------------------------------------------;
 ; Go at trapezoidal/rectanguler velocity profile.
+;
+; local variables: (24 bit, LSB first in list)
+; T0H:T2	current position (kind of loop variable) (s24.8)
+; T4:T6L	start position (s24)
+; A:BL		target position (s24)
+; BH:C		velocity (u16.8)
+; D:EL		next important point on ramp (midpoint, start of end ramp)
+; Tflag		direction of movement (b1)
 
+; 		T4:T6L = CtPos;	// s24
+; cur_pos T0:T2  = CtPos << 8;	// s32 (wirklich?)
+; cur_pos T0H:T2 = CtPos;	// s24 (wirklich?)
+; if (get_val())
+; {
+;   if (val==0) goto dg_0();
+;   if (val==1) goto dg_1();
+; }
+; goto cmd_err;
 do_go:
 	ldiw	Z, CtPos	;Z -> Position command reg.
 	lddw	T4, Z+0		;T6L:T4 = start position
@@ -480,24 +500,35 @@ dg_1:	 rcall	get_val		;BL:AL = target position
 	rjmp	dg_end		;/
 
 ; Trapezoidal velocity profile
+; if (!get_val()) goto cmd_err;
 dg_0:	 rcall	get_val		;BL:A = target posision
 	rjeq	cmd_err		;/
+; Tflag = (val<start_pos)//(val<T4:T6L)	// Tflag = direction of movement
+; // 0 = forward (positive), 1 = backward (negative)
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
 	clt			;
 	brge	PC+2		;
 	set			;/
+; // BH:C is start velocity (24 bit)
+; velocity = 0;
 	clr	r0		;
 	clr	BH		;CL:BH = start velocity
 	clrw	C		;/
 
+; do {
+;   velocity += MvAcc;
 dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	add	BH, DL		;Increase velocity
 	lds	DL, MvAcc+1	;
 	adc	CL, DL		;
 	adc	CH, _0		;/
+;   if (!dg_add()) goto dg_end;
 	 rcall	dg_add
 	brge	dg_end
+;   // A:BL is target position
+;   // T4:T6L is start position
+;   D:EL = (target - start)/2 + start;
 	movw	DL, AL		;Check current position has passed half of distance.
 	mov	EL, BL		;If passed, enter to down ramp.
 	sub	DL, T4L		;
@@ -507,22 +538,33 @@ dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	rorw	D		;
 	addw	D, T4		;
 	adc	EL, T6L		;
+
+;   if (direction) {	// if (Tflag) {
 	brts	b40		;
+;     if (cur_pos >= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 	cp	T0H, DL		;
 	cpc	T2L, DH		;
 	cpc	T2H, EL		;
 	brge	dg_de		;
 	rjmp	b41		;
+;   } else {
+;     if (cur_pos <= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 b40:	cp	DL, T0H		;
 	cpc	DH, T2L		;
 	cpc	EL, T2H		;
 	brge	dg_de		;/
+;   }
+; } while (velocity < MvSpd);
 b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cp	BH, DL		;If reached, enter constant velocity mode.
 	cpc	CL, DH		;
 	cpc	CH, _0		;
 	brlo	dg_ul		;/
 
+; // Calculate down ramp point:
+; // up ramp width was (cur_pos-start_pos)
+; // down ramp beginns at target - up_ramp_width = target - (cur-start)
+; EL:D ramp_point = start_pos - cur_pos + target_pos
 	movw	DL, T4L		;Calcurate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
@@ -530,19 +572,29 @@ b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	sbc	EL, T2H		;
 	addw	D, A		;
 	adc	EL, BL		;/ EL:DL = s.p. - c.p. + t.p.
+; do {
+;   dg_add();
 dg_cl:	 rcall	dg_add		;---Constant velocity loop
+;   if (direction==0) {		//Tflag==0) {
 	brts	b42
+;     if (cur_pos >= ramp_point) break; {// if (T0H:T2 >= EL:D) break;
 	cp	T0H, DL
 	cpc	T2L, DH
 	cpc	T2H, EL
 	brge	dg_de
 	rjmp	dg_cl
+;   } else {
+;     if (ramp_point >= cur_pos) break; {// if (EL:D < T0H:T2) goto dg_cl
 b42:	cp	DL, T0H
 	cpc	DH, T2L
 	cpc	EL, T2H
 	brlt	dg_cl
-
+; } // do
+; dg_add();
 dg_de:	 rcall	dg_add
+; while ((velocity-=MvAcc) >= 0) {
+;   if (dg_add()==0) break;
+; }
 dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	sub	BH, DL		;Decrese velocity
 	lds	DL, MvAcc+1	;
@@ -552,10 +604,22 @@ dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	 rcall	dg_add
 	brlt	dg_dl
 
+; block_irq();
+; CtPos = target_pos;
 dg_end:				; End of action
 	cli
 	stdw	Z+0, A
 	std	Z+2, BL
+; while (block_irq(), Pos!=target_pos) {
+;   allow_irq();
+;   if (receive()
+
+; // irq blocking is not exactly right in the C translation
+; do {
+;   block_irq();
+;   if (cur_pos == target_pos) break;
+;   allow_irq();
+; } while (receive()==0);
 dge_lp:	cli			; Wait until position stabled
 	cpw	_Pos, A
 	cpc	_PosX, BL
@@ -565,10 +629,19 @@ dge_lp:	cli			; Wait until position stabled
 	 rcall	receive
 	pop	AL
 	breq	dge_lp
+; goto main;
 b43:	rjmp	main
 
 
-
+;
+; do one 1ms step with the current velocity
+;
+; wait for 1kHz time interval without any torque flags set.
+; advance cur_pos by (velocity)
+; if that does not overrun the target position, advance CtPos by (velocity)
+;
+; returns: s-flag=1, N^V=1: all ok
+;          N^V=0: overun the target position (brge will catch this)
 dg_add:
 	cbr	_Flags, bit7	;Wait for 1kHz time interval
 b44:	push	AL		;
@@ -583,30 +656,42 @@ b45:	pop	AL		;
 	rjmp	dg_add		;
 	sbrc	_Flags, 5	;
 	rjmp	dg_add		;/
+; if (direction == 0) {		// if (Tflag==0) {
+;   cur_pos += velocity;	//T2:T0 += BH:C
 	brts	b46		;Increase commanded point by current velocity
 	add	T0L, BH		;
 	adc	T0H, CL		;
 	adc	T2L, CH		;
 	adc	T2H, CH		;
+;   if (cur_pos >= target) return 0;
 	cp	T0H, AL		;
 	cpc	T2L, AH		;
 	cpc	T2H, BL		;
 	brge	dga_ov		;
 	rjmp	b47		;
+; } else {
+;   cur_pos -= velocity;	//T2:T0 -= C:BH
 b46:	sub	T0L, BH		;
 	sbc	T0H, CL		;
 	sbc	T2L, CH		;
 	sbc	T2H, CH		;
+;   if (cur_pos <= target) return 0;
 	cp	AL, T0H		;
 	cpc	AH, T2L		;
 	cpc	BL, T2H		;
 	brge	dga_ov		;/
+; }
+; BEGIN_CRITICAL
+; CtPos = cur_pos >> 8;
+; END_CRITICAL;
 b47:	cli
 	std	Z+0, T0H
 	stdw	Z+1, T2
 	sei
+; return (1);
 	ses
 dga_ov:	ret
+; }
 
 dga_stop:
 	pop	AL
@@ -641,20 +726,48 @@ init_servo:
 ;----------------------------------------------------------;
 ; 83kHz Position capture and servo operation interrupt
 
+
+; part 1: position capture
+;
+
+; input: PIND
+; sideeffects/global variables:
+; - PvEnc: previous A/B signal (r/w)
+; - Pos/PosX: update the current position (r/w)
+; - saved registers: T0L, SREG, Z (left on stack)
+; modified registers: Z
+
 background:
 	push	T0L
 	pushw	Z
 	in	T0L, SREG		;Save flags
 
+; ZL = PvEnc;
 	mov	ZL, _PvEnc		;ZL[1:0] = previous A/B signal
+; PvEnc = swap(PIND);
 	in	_PvEnc, PIND		;Sample A/B signal into _PvEnc[1:0]
 	swap	_PvEnc			;/
+; if (PvEnc & 2) PvEnc ^= 1;
 	ldi	ZH, 1			;Convert it to sequencial number.
 	sbrc	_PvEnc, 1		;
 	eor	_PvEnc, ZH		;/
+; ZL = (ZL - PvEnc) & 3;
 	sub	ZL, _PvEnc		;Decode motion
 	andi	ZL, 3			;/
+; if (ZL) {
 	breq	enc_zr			;-> Not moved
+;   if (ZL == 3) {
+;     // enc_rev
+;     PvDir = -1;
+;     Pos--;
+;   } else if (ZL == 1) {
+;     // enc_fwd
+;     PvDir = 1;
+;     Pos++;
+;   } else {
+;     // missing code recovery
+;     Pos += 2*PvDir;
+;   }
 	cpi	ZL, 3			;
 	breq	enc_rev			;-> -1 count
 	cpi	ZL, 1			;
@@ -666,10 +779,14 @@ background:
 	rjmp	enc_add
 enc_rev:ldiw	Z, -1
 	rjmp	PC+3
+;     } // if (ZL!=1)
 enc_fwd:ldiw	Z, 1
 	mov	_PvDir, ZL
 enc_add:addw	_Pos, Z
 	adc	_PosX, ZH
+; } // if (ZL)
+
+; if (--CtDiv) return;
 enc_zr:
 	dec	_CtDiv		;Decrement 1/83 divider
 	rjne	bgnd_exit	;If not overflow, exit interrupt routine.
@@ -677,6 +794,7 @@ enc_zr:
 ; End of 83 kHz position captureing process. Follows are 1kHz servo
 ; operation. It will be interrupted itself, but will not be re-entered.
 
+; CtDiv = 83;
 	ldi	ZL, 83		;Re-initialize 1/83 divider
 	mov	_CtDiv, ZL	;/
 	sei			;Enable interrupts
@@ -691,6 +809,8 @@ enc_zr:
 
 	sbr	_Flags, bit7	; 1kHz interrupt flag
 
+; T2 = Pos - PvPos;
+; PvPos = Pos;
 	lddw	T2, Y+iPvPos	;Detect velocity
 	cli			;
 	subw	T2, _Pos	;
@@ -698,6 +818,7 @@ enc_zr:
 	sei			;
 	negw	T2		;/ T2 = velocity
 
+;
 	ldd	AL, Y+iMode	;Branch by servo mode
 	cpi	AL, 3		;Mode3?
 	breq	tap_position	;/
@@ -717,6 +838,8 @@ tap_position:
 	sbc	BH, _PosX	;
 	sei			;BH:T0 = position error
 
+; if (pos_error >= LimSpd) pos_error = LimSpd;
+; else if (pos_error <= -LimSpd) pos_error = -LimSpd;
 	lddw	A, Y+iLimSpd	;Velocity limit (P0)
 	clr	BL		;
 	cpw	T0, A		;
@@ -729,29 +852,43 @@ tap_position:
 	brge	tap_velocity	;
 b10:	movw	T0L, AL		;T0 = velocity command
 
+; output a velocity value (mode 2)
+;
 
+; input:
+; - T0: desired velocity value
+; - T2: current velocity (in pules/ms)
+; - Y: pointer to motor parameter block
+; output:
+; - T0: next torque value
+; modified registers: A, B, Z
 tap_velocity:
+; T0 -= speed{T2} * P1
 	movw	AL, T2L		;Velocity loop gain (P1)
 	lddw	B, Y+iGaSpd	;
 	 rcall	muls1616	;B = scaled velocity
 	subw	T0, B		;T0 = velocity error
 
+; Z = T0 * GaTqP			; P term P2
 	movw	AL, T0L		;Velocity error P-gain (P2)
 	lddw	B, Y+iGaTqP	;
 	 rcall	muls1616	;
 	movw	ZL, BL		;Z = P term;
 
+; Z += PvInt * GaTqI			; I term P3
 	lddw	A, Y+iPvInt	;Velocity error I-gain (P3)
 	lddw	B, Y+iGaTqI	;
 	 rcall	muls1616	;
 	addw	Z, B		;Z += I term;
 
+; if (Z>= LimTrq) {Z=LimTrq; set_flag(6);}	;Torque limit P4 (LimTrq)
 	cbr	_Flags, bit6+bit5;Torque limit (P4)
 	lddw	B, Y+iLimTrq	;
 	cpw	Z, B		;
 	brlt	b20		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit6	;
+; if (Z< -LimTrq) {Z=-LimTrq; set_flag(5);}
 b20:	neg	BL		;
 	com	BH		;
 	cpw	Z, B		;
@@ -759,6 +896,7 @@ b20:	neg	BL		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit5	;/
 
+; if ( ((T0<0)&&!flag(5)) || ((T0>=0)&&!flag(6)) ) PvInt += T0;
 b21:	tst	T0H		;PvInt += T0, with anti-windup
 	brmi	b22		;
 	sbrc	_Flags, 6	;
@@ -766,12 +904,24 @@ b21:	tst	T0H		;PvInt += T0, with anti-windup
 	rjmp	b23		;
 b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
+; PvInt += T0
 b23:	lddw	A, Y+iPvInt	;
 	addw	A, T0		;
 	stdw	Y+iPvInt, A	;/
-
+; if (flags(5) || flags(6)) {
+;   led_on(LED_TORQUE);
+; } else {
+;   led_off(LED_TORQUE);
+;   if (OvTmr-1)>0) {
+;     OvTmr--;
+;     if (OvTmr >= TL_TIME) goto servo_error;
+;   }
+; }
+; T0 = Z
+;
 b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
+;AL is overwritten right away, but the CPU flags survive
 	lddw	A, Y+iOvTmr	; works, decreased by 1 when no torque limit.
 	breq	b25		; When the value reaches TL_TIME, servo turns
 	led_on	LED_TORQUE	; off and goes error state.
@@ -787,7 +937,17 @@ b26:	stdw	Y+iOvTmr, A	;
 
 b27:	movw	T0L, ZL		;T0 = torque command
 
-
+; output a torque/current value (mode 1)
+;
+; current_PWM{T0} += speed{T2}*P5;
+;
+; input:
+; - T2: current velocity (in pules/ms)
+; - Y: pointer to motor parameter block
+; - T0: current PWM value (left over from the last round)
+; output:
+; - T0: next PWM value
+; modified registers: A, B
 tap_torque:
 	movw	AL, T2L		;EG compensation (P5)
 	lddw	B, Y+iGaEG	;
@@ -795,6 +955,18 @@ tap_torque:
 	addw	T0, B		;T0 = voltage command
 
 
+; output a PWM value (mode 0)
+;
+; clip T0 to [-240;240]
+; OCR1A = (T0/2) + 120;
+; OCR1B = 120 - (T0/2);
+;
+; input:
+; - T0: value to output.
+;
+; valid outputs and side effects:
+;
+; modified registers: A
 tap_voltage:
 	ldiw	A, 240		;Clip output voltage between -240 and +240.
 	cpw	T0, A		; Limit minimum duty ratio to 15/16 for bootstrap
@@ -963,7 +1135,10 @@ muls1616:
 
 ;--------------------------------------;
 ; Input a command line into LineBuf.
-
+;
+; returns:
+; - BH: number of char in buffer
+; - X: pointer to LineBuf
 get_line:
 	ldiw	X,LineBuf
 	ldi	BH,0
