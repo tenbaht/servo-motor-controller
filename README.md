@@ -161,9 +161,23 @@ Move to position 100 at a constant speed of 10:
 
 	g1 100 10
 
-Jump to 500 at maximum speed and acceleration:
+Jump to 500 at maximum speed (P0) and acceleration (only limited by the
+current/torque limit P4):
 
 	j 500
+
+
+## Connection to the real world
+
+Positions are in encoder counts and speeds are in encoder counts per
+millisecond. A linear encoder strip from an old DeskJet printer with 150 lpi
+(lines per inch) gives 600 encoder counts per inch = 42.3um/count.
+
+- Position 1000 is at 42.3mm
+- Speed 10 cnt/ms is 10000 cnt/s = 423mm/s.
+
+For rotational encoder it all scales to rounds and rpm or rps instead of
+distance and distance/time.
 
 
 
@@ -197,6 +211,11 @@ around in my drawer...
 
 
 ## Files in this repository
+
+_atmega/_: the ATmega port of SMC3
+
+_cport/_: parts of the assembler code translated into something very similar
+to C. It won't compile, but it is more readable.
 
 The original archives are unpacked for reference into chan/smc and chan/smc3.
 
