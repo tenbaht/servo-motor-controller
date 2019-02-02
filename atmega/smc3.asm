@@ -906,8 +906,32 @@ b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
 ; PvInt += T0
 b23:	lddw	A, Y+iPvInt	;
-	addw	A, T0		;
-	stdw	Y+iPvInt, A	;/
+;-- addition: decay for the integral value after steady state is reached
+;   (useful for static positioning applications like XY-tables)
+; if (T0 || T2) A+=T0
+; else {B=(A>>6); A-=B}
+
+	mov	BL, T0L		; check for (T0==0)&&(T2==0)
+	or	BL, T0H
+	or	BL, T2L
+	or	BL, T2H
+	brne	b28
+	movw	BL, AL		; B = A>>5
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	subw	A, B		; A -= B;
+	rjmp	b29
+;--
+b28:	addw	A, T0		;
+b29:	stdw	Y+iPvInt, A	;/
 ; if (flags(5) || flags(6)) {
 ;   led_on(LED_TORQUE);
 ; } else {
