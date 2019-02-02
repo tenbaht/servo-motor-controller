@@ -480,7 +480,7 @@ dg_1:	 rcall	get_val		;BL:AL = target position
 	rjmp	dg_end		;/
 
 ; Trapezoidal velocity profile
-dg_0:	 rcall	get_val		;BL:AL = target posision
+dg_0:	 rcall	get_val		;BL:A = target posision
 	rjeq	cmd_err		;/
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
@@ -492,13 +492,13 @@ dg_0:	 rcall	get_val		;BL:AL = target posision
 	clrw	C		;/
 
 dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
-	add	BH, DL		;Increace velocity
+	add	BH, DL		;Increase velocity
 	lds	DL, MvAcc+1	;
 	adc	CL, DL		;
 	adc	CH, _0		;/
 	 rcall	dg_add
 	brge	dg_end
-	movw	DL, AL		;Check current posisiton has passed half of distance.
+	movw	DL, AL		;Check current position has passed half of distance.
 	mov	EL, BL		;If passed, enter to down ramp.
 	sub	DL, T4L		;
 	sbc	DH, T4H		;
@@ -507,21 +507,21 @@ dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	rorw	D		;
 	addw	D, T4		;
 	adc	EL, T6L		;
-	brts	PC+6		;
+	brts	b40		;
 	cp	T0H, DL		;
 	cpc	T2L, DH		;
 	cpc	T2H, EL		;
 	brge	dg_de		;
-	rjmp	PC+5		;
-	cp	DL, T0H		;
+	rjmp	b41		;
+b40:	cp	DL, T0H		;
 	cpc	DH, T2L		;
 	cpc	EL, T2H		;
 	brge	dg_de		;/
-	ldsw	D, MvSpd	;Has current velocity reached P6?
+b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cp	BH, DL		;If reached, enter constant velocity mode.
 	cpc	CL, DH		;
 	cpc	CH, _0		;
-	brcs	dg_ul		;/
+	brlo	dg_ul		;/
 
 	movw	DL, T4L		;Calcurate down ramp point
 	mov	EL, T6L		;
@@ -531,13 +531,13 @@ dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	addw	D, A		;
 	adc	EL, BL		;/ EL:DL = s.p. - c.p. + t.p.
 dg_cl:	 rcall	dg_add		;---Constant velocity loop
-	brts	PC+6
+	brts	b42
 	cp	T0H, DL
 	cpc	T2L, DH
 	cpc	T2H, EL
 	brge	dg_de
 	rjmp	dg_cl
-	cp	DL, T0H
+b42:	cp	DL, T0H
 	cpc	DH, T2L
 	cpc	EL, T2H
 	brlt	dg_cl
@@ -560,30 +560,30 @@ dge_lp:	cli			; Wait until position stabled
 	cpw	_Pos, A
 	cpc	_PosX, BL
 	sei
-	breq	PC+5
+	breq	b43
 	push	AL
 	 rcall	receive
 	pop	AL
 	breq	dge_lp
-	rjmp	main
+b43:	rjmp	main
 
 
 
 dg_add:
 	cbr	_Flags, bit7	;Wait for 1kHz time interval
-	push	AL		;
+b44:	push	AL		;
 	 rcall	receive		; Break on ESC received
-	breq	PC+3		;
+	breq	b45		;
 	cpi	AL, 0x1B	;
 	breq	dga_stop	; /
-	pop	AL		;
+b45:	pop	AL		;
 	sbrs	_Flags, 7	;
-	rjmp	PC-7		;/
-	sbrc	_Flags, 6	;Skip if torque limit has being occured.
+	rjmp	b44		;/
+	sbrc	_Flags, 6	;Skip if torque limit did occur.
 	rjmp	dg_add		;
 	sbrc	_Flags, 5	;
 	rjmp	dg_add		;/
-	brts	PC+10		;Increase commanded point by current velocity
+	brts	b46		;Increase commanded point by current velocity
 	add	T0L, BH		;
 	adc	T0H, CL		;
 	adc	T2L, CH		;
@@ -592,8 +592,8 @@ dg_add:
 	cpc	T2L, AH		;
 	cpc	T2H, BL		;
 	brge	dga_ov		;
-	rjmp	PC+9		;
-	sub	T0L, BH		;
+	rjmp	b47		;
+b46:	sub	T0L, BH		;
 	sbc	T0H, CL		;
 	sbc	T2L, CH		;
 	sbc	T2H, CH		;
@@ -601,7 +601,7 @@ dg_add:
 	cpc	AH, T2L		;
 	cpc	BL, T2H		;
 	brge	dga_ov		;/
-	cli
+b47:	cli
 	std	Z+0, T0H
 	stdw	Z+1, T2
 	sei
