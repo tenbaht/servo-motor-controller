@@ -134,20 +134,20 @@ Disp:	.byte	1+8	;Display buffer, pointer
 
 
 ; Displacements referrd from RAMTOP
-.equ	iLimSpd	= LimSpd-RAMTOP
-.equ	iGaSpd	= GaSpd-RAMTOP
-.equ	iGaTqP	= GaTqP-RAMTOP
-.equ	iGaTqI	= GaTqI-RAMTOP
-.equ	iLimTrq	= LimTrq-RAMTOP
-.equ	iGaEG	= GaEG-RAMTOP
-.equ	iMvSpd	= MvSpd-RAMTOP
-.equ	iMvAcc	= MvAcc-RAMTOP
-.equ	iCtPos	= CtPos-RAMTOP
-.equ	iCtSub	= CtSub-RAMTOP
-.equ	iPvInt	= PvInt-RAMTOP
-.equ	iPvPos	= PvPos-RAMTOP
-.equ	iOvTmr	= OvTmr-RAMTOP
-.equ	iMode	= Mode-RAMTOP
+.equ	iLimSpd	= LimSpd-Parms
+.equ	iGaSpd	= GaSpd-Parms
+.equ	iGaTqP	= GaTqP-Parms
+.equ	iGaTqI	= GaTqI-Parms
+.equ	iLimTrq	= LimTrq-Parms
+.equ	iGaEG	= GaEG-Parms
+.equ	iMvSpd	= MvSpd-Parms
+.equ	iMvAcc	= MvAcc-Parms
+.equ	iCtPos	= CtPos-Parms
+.equ	iCtSub	= CtSub-Parms
+.equ	iPvInt	= PvInt-Parms
+.equ	iPvPos	= PvPos-Parms
+.equ	iOvTmr	= OvTmr-Parms
+.equ	iMode	= Mode-Parms
 
 
 ; Host command
