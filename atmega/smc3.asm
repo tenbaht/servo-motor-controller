@@ -212,9 +212,9 @@ reset:
 	outi	SPL, low(RAMEND)	;Stask ptr
 	clr	_0			;Clear RAM
 	ldiw	Y, RAMTOP		;
-	st	Y+, _0			;
+b001:	st	Y+, _0			;
 	cpi	YL, low(RAMTOP+128)	;
-	brne	PC-2			;/
+	brne	b001			;/
 
 	outi	PORTD, 0b01111111	;Initialize PORTD
 	outi	DDRD,  0b00000010	;/
@@ -271,9 +271,9 @@ main:
 	 rcall	get_line	;Get a command line
 	ld	BH,X+		;BH = command char
 	cpi	BH,'a'		;CAPS
-	brcs	b01		;
+	brcs	b02		;
 	subi	BH,0x20		;/
-b01:	cpi	BH,' '		;Null line ?
+b02:	cpi	BH,' '		;Null line ?
 	brlt	main		;
 	cpi	BH,'J'		;Jump?
 	rjeq	do_jump		;
@@ -334,11 +334,11 @@ ds_set:	 rcall	get_val
 	 rcall	get_line
 	 rcall	get_val
 	brcs	cmd_err
-	breq	PC+5
+	breq	b03
 ds_st:	cli
 	stdw	Y+0, A
 	sei
-	rjmp	main
+b03:	rjmp	main
 
 
 
@@ -362,8 +362,8 @@ do_weep:	; Save parameters into EEPROM
 	cpi	AL, (EEPROMEND+1)/N_PARM/2
 	brcc	cmd_err
 	 rcall	get_eeadr
-	sbic	EECR, EEPE
-	rjmp	PC-1
+b04:	sbic	EECR, EEPE
+	rjmp	b04
 	out	EEAR, BH
 	inc	BH
 	ld	AL, Y+
@@ -373,30 +373,30 @@ do_weep:	; Save parameters into EEPROM
 	sbi	EECR, EEPE
 	sei
 	dec	AH
-	brne	PC-11
+	brne	b04
 	rjmp	main
 
 
 load_parms:
 	 rcall	get_eeadr
-	out	EEAR, BH
+b05:	out	EEAR, BH
 	inc	BH
 	sbi	EECR, EERE
 	in	AL, EEDR
 	st	Y+, AL
 	dec	AH
-	brne	PC-6
+	brne	b05
 	ret
 
 
 get_eeadr:
 	ldi	AH, N_PARM*2
 	clr	BH
-	subi	AL, 1
-	brcs	PC+3
+b06:	subi	AL, 1
+	brcs	b07
 	add	BH, AH
-	rjmp	PC-3
-	ldiw	Y, Parms
+	rjmp	b06
+b07:	ldiw	Y, Parms
 	ret
 
 
@@ -416,10 +416,10 @@ dp_p:	ldi	AL, 0x0d	;Show position counter
 	 rcall	dp_dec		;
 	ldi	AL, ' '		;
 	 rcall	xmit		;/
-	 rcall	receive		;Break if any key was pressed
+b08:	 rcall	receive		;Break if any key was pressed
 	rjne	main		;/
 	cp	T0H, _PosL	;Continue if not changed
-	breq	PC-4		;/
+	breq	b08		;/
 	rjmp	dp_p
 
 
@@ -472,11 +472,11 @@ dg_1:	 rcall	get_val		;BL:AL = target position
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
 	clt			;
-	brge	PC+2		;
+	brge	b09		;
 	set			;/
-	clr	r0		;
-	 rcall	dg_add		;---Constant velocity loop
-	brlt	PC-1		;
+b09:	clr	r0		;
+b010:	 rcall	dg_add		;---Constant velocity loop
+	brlt	b010		;
 	rjmp	dg_end		;/
 
 ; Trapezoidal velocity profile
@@ -485,9 +485,9 @@ dg_0:	 rcall	get_val		;BL:A = target posision
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
 	clt			;
-	brge	PC+2		;
+	brge	b011		;
 	set			;/
-	clr	r0		;
+b011:	clr	r0		;
 	clr	BH		;CL:BH = start velocity
 	clrw	C		;/
 
@@ -625,9 +625,9 @@ init_servo:
 	cli
 	sts	Mode, AL	;Set servo mode
 	ldiw	Y, CtPos	;Clear cmmand regs and servo operators.
-	st	Y+, _0		;
+b012:	st	Y+, _0		;
 	cpi	YL, low(CtPos+11);
-	brne	PC-2		;/
+	brne	b012		;/
 	clrw	_Pos		;Clear position counter
 	clr	_PosX		;/
 	sei
@@ -665,9 +665,9 @@ background:
 	asr	ZH			;/
 	rjmp	enc_add
 enc_rev:ldiw	Z, -1
-	rjmp	PC+3
+	rjmp	b013
 enc_fwd:ldiw	Z, 1
-	mov	_PvDir, ZL
+b013:	mov	_PvDir, ZL
 enc_add:addw	_Pos, Z
 	adc	_PosX, ZH
 enc_zr:
@@ -857,7 +857,7 @@ disp_pos:
 	mov	BL,_PosX
 	ldi	CH,0
 	sbrs	BL,7
-	rjmp	PC+8
+	rjmp	b50
 	ldi	CH,0x40
 	com	AL
 	com	AH
@@ -865,7 +865,7 @@ disp_pos:
 	adc	AL,_0
 	adc	AH,_0
 	adc	BL,_0
-	ldiw	Y,Disp
+b50:	ldiw	Y,Disp
 dp_l1:	ldi	CL,24
 	ldi	BH,0
 dp_l2:	lsl	AL
@@ -873,10 +873,10 @@ dp_l2:	lsl	AL
 	rol	BL
 	rol	BH
 	cpi	BH,10
-	brcs	PC+3
+	brcs	b51
 	subi	BH,10
 	inc	AL
-	dec	CL
+b51:	dec	CL
 	brne	dp_l2
 	ldiw	Z,t_7seg*2
 	add	ZL,BH
@@ -887,10 +887,10 @@ dp_l2:	lsl	AL
 	cpc	AH,_0
 	cpc	BL,_0
 	brne	dp_l1
-	st	Y+,CH
+b52:	st	Y+,CH
 	clr	CH
 	cpi	YL,low(Disp+8)
-	brne	PC-3
+	brne	b52
 	clr	DL
 
 .ifdef USIDR
@@ -908,14 +908,14 @@ dp_out:	ldiw	Y,Disp
 	out	USIDR,AL
 	ldi	AH,0x80
 	ldi	CL,8
-	out	PINB,AH
+b53:	out	PINB,AH
 	dec	CL
 	out	PINB,AH
-	brne	PC-3
+	brne	b53
 	cpi	DL,0
-	brne	PC+2
+	brne	b54
 	ldi	AH,0
-	out	USIDR,AH
+b54:	out	USIDR,AH
 	sbi	PORTB,5
 	cbi	PORTB,5
 	ret
@@ -931,7 +931,7 @@ dp_out:
 ;--------------------------------------;
 ; 16bit * 16bit signed multiply
 ; 
-; Multiplyer:   A(signed int)
+; Multiplier:   A(signed int)
 ; Multiplicand: B(unsigned, 8.8 fraction)
 ; Result:       B(signed int)
 ; Clk:		181(max)
@@ -939,25 +939,25 @@ dp_out:
 muls1616:
 	clt
 	tst	AH
-	brpl	PC+6
+	brpl	b60
 	set
 	negw	A
 
-	subw	C, C	; clear high 16bit.
+b60:	subw	C, C	; clear high 16bit.
 	ldi	DL, 17	; DL = loop count
-	brcc	PC+3	; ---- calcurating loop
+b61:	brcc	b62	; ---- calcurating loop
 	addw	C, A	;
-	rorw	C	;
+b62:	rorw	C	;
 	rorw	B	;
 	dec	DL	; if (--DL > 0)
-	brne	PC-8	;  continue loop;
+	brne	b61	;  continue loop;
 
 	mov	BL, BH
 	mov	BH, CL
 
-	brtc	PC+5	; Negate the result if multiplyer was negative.
+	brtc	b63	; Negate the result if multiplier was negative.
 	negw	B
-	ret
+b63:	ret
 
 
 
@@ -1001,9 +1001,9 @@ b81:	cpi	AL,' '		; SP
 
 dp_str:	lpm	AL, Z+
 	tst	AL
-	brne	PC+2
+	brne	b82
 	ret
-	 rcall	xmit
+b82:	 rcall	xmit
 	rjmp	dp_str
 
 
@@ -1024,15 +1024,15 @@ get_val:
 	clr	AL
 	clr	AH
 	clr	BL
-	ld	BH,X+
+b83:	ld	BH,X+
 	cpi	BH,' '
 	brcs	gd_n
-	breq	PC-3
+	breq	b83
 	cpi	BH,'-'
-	brne	PC+3
+	brne	b84
 	set
 gd_l:	ld	BH,X+
-	cpi	BH,' '+1
+b84:	cpi	BH,' '+1
 	brcs	gd_e
 	subi	BH,'0'
 	brcs	gd_x
@@ -1041,14 +1041,14 @@ gd_l:	ld	BH,X+
 	ldi	CL, 25
 	ldi	CH, 10
 	sub	r0, r0
-	lsr	r0
+b85:	lsr	r0
 	ror	BL
 	ror	AH
 	ror	AL
-	brcc	PC+2
+	brcc	b86
 	add	r0, CH
-	dec	CL
-	brne	PC-7
+b86:	dec	CL
+	brne	b85
 	add	AL, BH
 	adc	AH, _0
 	adc	BL, _0
@@ -1057,14 +1057,14 @@ gd_x:	sec
 	sez
 	ret
 gd_e:	sbiw	XL,1
-	brtc	PC+7
+	brtc	b87
 	com	AL
 	com	AH
 	com	BL
 	subi	AL,-1
 	sbci	AH,-1
 	sbci	BL,-1
-	clc
+b87:	clc
 	ret
 gd_n:	sbiw	XL,1
 	clc
@@ -1081,7 +1081,7 @@ gd_n:	sbiw	XL,1
 
 dp_dec:	ldi	CH,' '
 	sbrs	BL, 7
-	rjmp	PC+8
+	rjmp	b88
 	com	AL
 	com	AH
 	com	BL
@@ -1089,30 +1089,30 @@ dp_dec:	ldi	CH,' '
 	adc	AH,_0
 	adc	BL,_0
 	ldi	CH,'-'
-	clr	T0L		;digit counter
-	inc	T0L		;---- decimal string generating loop
+b88:	clr	T0L		;digit counter
+b088:	inc	T0L		;---- decimal string generating loop
 	clr	BH		;var1 /= 10;
 	ldi	CL,24		;
-	lslw	A		;
+b89:	lslw	A		;
 	rolw	B		;
 	cpi	BH,10		;
-	brcs	PC+3		;
+	brcs	b89a		;
 	subi	BH,10		;
 	inc	AL		;
-	dec	CL		;
-	brne	PC-9		;/
+b89a:	dec	CL		;
+	brne	b89		;/
 	addi	BH,'0'		;Push the remander (a decimal digit)
 	push	BH		;/
 	cp	AL,_0		;if(var1 =! 0)
 	cpc	AH,_0		; continue digit loop;
 	cpc	BL,_0		;
-	brne	PC-18		;/
+	brne	b088		;/
 	mov	AL, CH		;Sign
 	 rcall	xmit		;/
-	pop	AL		;Transmit decimal string
+b89b:	pop	AL		;Transmit decimal string
 	 rcall	xmit		;<-- Put a char to memory, console or any other display device
 	dec	T0L		;
-	brne	PC-3		;/
+	brne	b89b		;/
 	ret
 
 
@@ -1123,16 +1123,16 @@ dp_dec:	ldi	CH,' '
 echo:
 xmit:
 .if UDR < 0x40
-	sbis	UCSRA, UDRE
-	rjmp	PC-1
+b90:	sbis	UCSRA, UDRE
+	rjmp	b90
 	out	UDR, AL
 	ret
 .else
 	push	AH		; not sure if AH is really important.
-s01:
+b90:
 	lds	AH, UCSRA
 	sbrs	AH, UDRE
-	rjmp	s01
+	rjmp	b90
 	sts	UDR, AL
 	pop	AH
 	ret
@@ -1146,7 +1146,7 @@ receive:; Receive a char into AL. (ZR=no data)
 	ldd	AH, Y+0
 	ldd	AL, Y+1
 	cp	AH, AL
-	breq	PC+8
+	breq	b91
 	add	YL, AH
 	ldd	AL, Y+2
 	sub	YL, AH
@@ -1154,7 +1154,7 @@ receive:; Receive a char into AL. (ZR=no data)
 	andi	AH, 15
 	std	Y+0, AH
 	clz
-	sei
+b91:	sei
 	popw	Y
 	pop	AH
 	ret
@@ -1182,13 +1182,13 @@ rxint:	;USART0 Rx ready
 	inc	AH
 	andi	AH, 15
 	cp	AH, AL
-	breq	PC+6
+	breq	b92
 	std	Y+1, AH
 	dec	AH
 	andi	AH, 15
 	add	YL, AH
 	std	Y+2, BL
-	popw	Y
+b92:	popw	Y
 	popw	A
 	pop	BL
 	out	SREG, AL

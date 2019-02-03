@@ -1,5 +1,5 @@
-This is a port of the very sophisticated [DC Servomotor
-Controller](http://elm-chan.org/works/smc/report_e.html) by Elm Chan for the
+This is a port of the very sophisticated [DC Servomotor Controller
+SMC3](http://elm-chan.org/works/smc/report_e.html) by Elm Chan for the
 ATmega328 as used with the popular Arduino Uno and Arduino Nano boards.
 
 It includes the results of a detailed analysis of the inner workings of the
@@ -63,7 +63,7 @@ compile:
 
 	make
 
-upload:
+upload/flash to an Arduino Uno using avrdude:
 
 	make upload
 
@@ -84,7 +84,7 @@ compatible):
 
 
 
-## Wiring
+## Pin connections
 
 Signal		|Pin ATtiny2313	|Pin m328	|Arduino Uno pin number
 ------		|--------	|-----------	|---------
@@ -96,8 +96,8 @@ DIR		|PD6		|PD6/OC0A	|6
 TxD		|PD1/TXD	|PD1/TXD	|1
 RxD		|PD0/RXD	|PD0/RXD	|0
 SCK (Clk)	|PB7/SCK/USCK	| PB5/SCK	|13
-MISO (SegData)	|PB6/MISO/DO	| PB3/MOSI	|11 (intentionally swopped)
-MOSI (DigitClk)	|PB5/MOSI/DI	| PB4/MISO	|12 (intentionally swopped)
+MISO (SegData)	|PB6/MISO/DO	| PB3/MOSI	|11 (intentionally swapped)
+MOSI (DigitClk)	|PB5/MOSI/DI	| PB4/MISO	|12 (intentionally swapped)
 Mot_n		|PB4/OC1B	| PB2/OC1B	|10
 Mot_p		|PB3/OC1A	| PB1/OC1A	|9
 LED_Ready	|PB2/OC0A	|PC2		|16 (flexible)
@@ -108,14 +108,14 @@ Xtal2		|PA1/X2		|		|
 Xtal1		|PA0/X1		|		|
 
 The three LED connections can be easily reconfigured in the source code. All
-other connections are very hard-coded and would require major changes.
+other connections are _very hard_-coded and would require major changes.
 
 
 
 ## Usage
 
-Connect position encoder and motor driver, start a serial terminal with
-38400N1. Check if you can turn the motor on a 50% PWM signal:
+Connect the position encoder and the motor driver, start a serial terminal
+with 38400N1. Check if the motor runs on a 50% PWM signal:
 
 	SMC type 3
 
@@ -176,7 +176,7 @@ millisecond. A linear encoder strip from an old DeskJet printer with 150 lpi
 - Position 1000 is at 42.3mm
 - Speed 10 cnt/ms is 10000 cnt/s = 423mm/s.
 
-For rotational encoder it all scales to rounds and rpm or rps instead of
+For rotational encoders it all scales to rounds and rpm or rps instead of
 distance and distance/time.
 
 
@@ -249,5 +249,6 @@ interface, but no serial interface and no LED display.
 
 ## Licence
 
-The original work was released under the [Creative Commons Attribution 3.0 Unported]
-(https://creativecommons.org/licenses/by/3.0/) (CC-BY 3.0) by Elm Chan.
+The original work was released under the [Creative Commons Attribution 3.0
+Unported](https://creativecommons.org/licenses/by/3.0/) (CC-BY 3.0) by Elm
+Chan.
