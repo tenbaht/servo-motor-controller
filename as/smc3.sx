@@ -95,13 +95,13 @@ UBRR	= UBRRL
 	.word	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
 
 	; Memory bank 1 : Yasukawa Electric UGTMEM-A1SA51
-	.int	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
+	.word	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
 
 	; Memory bank 2 : Tamagawa Seiki TS1410N1
 	.word	300, 0x0800, 0x0300, 0x0060, 180, 0x0550,  0x1a00, 32
 
 	; Memory bank 3 : Matsushita Electric MCN-14EAEC (6V, 40p/r)
-	.int	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64
+	.word	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64
 
 N_PARM = 8	; Number of parameter words per bank.
 
@@ -111,14 +111,11 @@ N_PARM = 8	; Number of parameter words per bank.
 ; Data memory area
 
 .section .bss
-;	.org	RAMTOP
-	.org	0	;due to linker constrains with avr-as do_parm needs
-			;to hard-code the address of Parms as RAMTOP (0
-			;withing the bss section)
+
 ; Servo / G command parameters
-Parms:			;this *MUST* be the very first thing in .bss section!
-LimSpd:	.fill	2	;P0,velocity limit		Integer
-GaSpd:	.fill	2	;P1,velocity feedback gain	8.8 fixed point
+Parms:
+LimSpd:	.fill	2	;P0,Velocity limit		Integer
+GaSpd:	.fill	2	;P1,Velocity feedback gain	8.8 fixed point
 GaTqP:	.fill	2	;P2,Proportional gain		8.8 fixed point
 GaTqI:	.fill	2	;P3,Integral gain		8.8 fixed point
 LimTrq:	.fill	2	;P4,Torque limit		Integer
@@ -216,7 +213,6 @@ LineBuf:.fill	20	; Command line input buffer
 #endif
 
 
-;main:
 reset:
 	outi	SPL, low(RAMEND)	;Stask ptr
 	clr	_0			;Clear RAM
@@ -254,11 +250,11 @@ b001:	st	Y+, _0			;
 	outi	TCCR0A, 0b00000010	;
 	outi	TCCR0B, 0b00000011	;
 	outi	TIMSK, (1<<OCIE0A)	;/
-#ifdef USICR
+.ifdef USICR
 	outi	USICR, 0b00011100	;USI: LED display
-#else
+.else
 	;FIXME: initialize 3-wire SPI instead
-#endif
+.endif
 
 	ldi	_Flags, 0
 
@@ -328,8 +324,7 @@ do_parm:	; Set parameters
 	lsl	AL
 	mov	YL, AL
 	clr	YH
-;	subiw	YL, -Parms		; avra only, avr-as can't relocate this
-	subiw	YL, -RAMTOP		; FIXME: this is a hidden dependency
+	subiw	YL, -(Parms)		; brackets required for relocation
 ds_set:	 rcall	get_val
 	brcs	cmd_err
 	brne	ds_st
@@ -1222,8 +1217,6 @@ b92:	popw	YL
 ;----------------------------------------------------------;
 ; Strings
 
-;.data
-
 		.balign	2
 m_prompt:	.string	"\r\n%"
 		.balign	2
@@ -1233,5 +1226,3 @@ m_start:	.string	"\r\nSMC type 3\r\n"
 
 		.balign	2
 t_7seg:		.byte	0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F
-
-;*****

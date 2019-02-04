@@ -205,8 +205,8 @@ bit7	= 0b10000000
 
 ; this does not work for addresses, avr-as can't relocate the -\val.
 .macro	addiw	reg,val
-	subi	\reg,lo8(-\val)
-	sbci	\reg+1,hi8(-\val)
+	subi	\reg,lo8(-(\val))	; the brackets are required by gas
+	sbci	\reg+1,hi8(-(\val))	; to be able to relocate the value
 .endm
 
 .macro	subiw	reg,val			;
