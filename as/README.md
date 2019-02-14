@@ -129,18 +129,25 @@ R_AVR_LO8_LDI_NEG.
 Strange, isn't it? Is this an assembler bug?
 
 
-#### pointer
+#### Pointer into flash
 
 Since avr-as calculates flash addresses in bytes rather than word, the
 pointer values don't need to be multiplied by two anymore to access the stored
 strings.
 
 
+#### Program-counter relative calculations
+
+Replace all PC-relative branch specifiers by labels.
+[Here](https://tenbaht.github.io/posts/migrating-from-avra-to-avr-as/#program-counter)
+is why.
+
+
 
 ### Modifications to avr.inc
 
 Massive. And most of it can't be automated. And the result needs to be
-included with `#include`, because it contains `#define`s that need to
+included with `#include`, because it contains `#define`s that has to be
 evaluated at preprocessing time.
 
 Don't change the .if/.endif, because this time they need to evaluated at
