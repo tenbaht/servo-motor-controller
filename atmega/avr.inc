@@ -253,8 +253,9 @@
 .macro	negw
 	com	@0H
 	neg	@0L
-	brne	PC+2
+	brne	end
 	inc	@0H
+end:
 .endm
 
 .macro	movew
@@ -308,13 +309,15 @@
 
 
 .macro	rjne
-	breq	PC+2
+	breq	end
 	rjmp	@0
+end:
 .endm
 
 .macro	rjeq
-	brne	PC+2
+	brne	end
 	rjmp	@0
+end:
 .endm
 
 .macro	rjcc

@@ -4,82 +4,85 @@
 ;
 
 .nolist
-.include "m328Pdef.inc"
-.include "avr.inc"
+#define __SFR_OFFSET 0
+#include "avr/io.h"
+;.include "m328Pdef.inc"
+#include "avr.inc"
 .list
 
+.global		main
 
-.equ	SYSCLK	= 16000000	;System clock
-.equ	BPS	= 38400		;UART bps
-.equ	TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
+SYSCLK	= 16000000	;System clock
+BPS	= 38400		;UART bps
+TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
 
-.def	_0	= r15	;Permanent zero register
-.def	_PvEnc	= r14	;Previous encoder signal A/B
-.def	_PvDir	= r13	;Previous direction
-.def	_PosX	= r12	;Current position
-.def	_PosH	= r11	;
-.def	_PosL	= r10	;/
+#define	_0	r15	//;Permanent zero register
+#define	_PvEnc	r14	//;Previous encoder signal A/B
+#define	_PvDir	r13	//;Previous direction
+#define	_PosX	r12	//;Current position
+#define	_PosH	r11	//;
+#define	_PosL	r10	//;/
 
-.def	_CtDiv	= r9	;1/83 divider
+#define	_CtDiv	r9	//;1/83 divider
 
-.def	_Flags	= r25	; 1kHz|Sat.F|Sat.R| | | |
+#define	_Flags	r25	//; 1kHz|Sat.F|Sat.R| | | |
 
+; avr-as workarounds
+#define	_Pos	_PosL
 
 ;----------------------------------------------------------;
 ; compatibility definitions for devices with different register names
 
 ; eeprom: bigger devices have 16 bit offset register
-.ifndef EEAR
-.equ	EEAR	= EEARL
-.endif
+#ifndef EEAR
+EEAR	= EEARL
+#endif
 
 ; uart: use UART0
-.ifndef UDR
-.equ	UBRRL	= UBRR0L
-.equ	UBRRH	= UBRR0H
-.equ	UCSRA	= UCSR0A
-.equ	UCSRB	= UCSR0B
-.equ	UDR	= UDR0
-.equ	UDRE	= UDRE0
-.equ	RXCIE	= RXCIE0
-.endif
+#ifndef UDR
+UBRRL	= UBRR0L
+UBRRH	= UBRR0H
+UCSRA	= UCSR0A
+UCSRB	= UCSR0B
+UDR	= UDR0
+UDRE	= UDRE0
+RXCIE	= RXCIE0
+#endif
 
 ; timer
-.ifndef TIMSK
-.equ	TIMSK	= TIMSK0
-.endif
+#ifndef TIMSK
+TIMSK	= TIMSK0
+#endif
+
+; workarounds for avr-as
+UBRR	= UBRRL
 
 
 ;----------------------------------------------------------;
 ; define LED pin mappings for different devices
 
-.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
-.equ	LED_ERROR_BIT	= 0
-.equ	LED_ERROR_PORT	= PORTB
-.equ	LED_TORQUE_BIT	= 1
-.equ	LED_TORQUE_PORT	= PORTB
-.equ	LED_READY_BIT	= 2
-.equ	LED_READY_PORT	= PORTB
+#if defined(__AVR_ATtiny2313__) || defined(__AVR_ATtiny2313A__)
+#define LED_ERROR	PORTB,0
+#define LED_TORQUE	PORTB,1
+#define LED_READY	PORTB,2
 
-.elif (__DEVICE__ == __ATmega328P__)
-.equ	LED_ERROR_BIT	= 0
-.equ	LED_ERROR_PORT	= PORTB
-.equ	LED_TORQUE_BIT	= 3
-.equ	LED_TORQUE_PORT	= PORTC
-.equ	LED_READY_BIT	= 2
-.equ	LED_READY_PORT	= PORTC
+#elif defined(__AVR_ATmega328__) || defined(__AVR_ATmega328P__)
+#define LED_ERROR	PORTB,0
+#define LED_TORQUE	PORTC,3
+#define LED_READY	PORTC,2
 
-.else
+#else
 .error "no LED pin definition found for this device"
 
-.endif
+#endif
 
-.macro	led_on
-	sbi	@0_PORT, @0_BIT	; LED on
+
+.macro	led_on	port,bit
+	sbi	\port,\bit	; LED on
 .endm
 
-.macro	led_off
-	cbi	@0_PORT, @0_BIT	; LED off
+.macro	led_off	port,bit
+	cbi	\port,\bit	; LED off
 .endm
 
 
@@ -87,82 +90,81 @@
 ;----------------------------------------------------------;
 ; EEPROM Area
 
-.eseg
+.section .eeprom
 	; Memory bank 0 : Yasukawa Electric UGTMEM-A1SA51
-	.dw	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
+	.word	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
 
 	; Memory bank 1 : Yasukawa Electric UGTMEM-A1SA51
-	.dw	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
+	.word	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128
 
 	; Memory bank 2 : Tamagawa Seiki TS1410N1
-	.dw	300, 0x0800, 0x0300, 0x0060, 180, 0x0550,  0x1a00, 32
+	.word	300, 0x0800, 0x0300, 0x0060, 180, 0x0550,  0x1a00, 32
 
 	; Memory bank 3 : Matsushita Electric MCN-14EAEC (6V, 40p/r)
-	.dw	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64
+	.word	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64
 
-.equ	N_PARM = 8	; Number of parameter words per bank.
+N_PARM = 8	; Number of parameter words per bank.
 
 
 
 ;----------------------------------------------------------;
 ; Data memory area
 
-.dseg
-	.org	RAMTOP
+.section .bss
+
 ; Servo / G command parameters
 Parms:
-LimSpd:	.byte	2	;P0,Velocity limit		Integer
-GaSpd:	.byte	2	;P1,Velocity feedback gain	8.8 fixed point
-GaTqP:	.byte	2	;P2,Proportional gain		8.8 fixed point
-GaTqI:	.byte	2	;P3,Integral gain		8.8 fixed point
-LimTrq:	.byte	2	;P4,Torque limit		Integer
-GaEG:	.byte	2	;P5,EG feedback gain		8.8 fixed point
-MvSpd:	.byte	2	;P6,G0 velocity			Integer
-MvAcc:	.byte	2	;P7,G0 acceleration		Integer
+LimSpd:	.fill	2	;P0,Velocity limit		Integer
+GaSpd:	.fill	2	;P1,Velocity feedback gain	8.8 fixed point
+GaTqP:	.fill	2	;P2,Proportional gain		8.8 fixed point
+GaTqI:	.fill	2	;P3,Integral gain		8.8 fixed point
+LimTrq:	.fill	2	;P4,Torque limit		Integer
+GaEG:	.fill	2	;P5,EG feedback gain		8.8 fixed point
+MvSpd:	.fill	2	;P6,G0 velocity			Integer
+MvAcc:	.fill	2	;P7,G0 acceleration		Integer
 
 ; Command/Servo registers
-CtPos:	.byte	3	;Position 		g/j	mode 3
-CtSub:	.byte	2	;Sub command   		s	mode 0/1/2
-PvInt:	.byte	2	;Integration register
-PvPos:	.byte	2	;Velocity detection register
-OvTmr:	.byte	2	;Torque limit timer
+CtPos:	.fill	3	;Position 		g/j	mode 3
+CtSub:	.fill	2	;Sub command   		s	mode 0/1/2
+PvInt:	.fill	2	;Integration register
+PvPos:	.fill	2	;velocity detection register
+OvTmr:	.fill	2	;Torque limit timer
 
-Mode:	.byte	1	;Servo Mode		m
+Mode:	.fill	1	;Servo Mode		m
 
 ; Display buffer
-Disp:	.byte	1+8	;Display buffer, pointer
+Disp:	.fill	1+8	;Display buffer, pointer
 
 
 ; Displacements referrd from RAMTOP
-.equ	iLimSpd	= LimSpd-Parms
-.equ	iGaSpd	= GaSpd-Parms
-.equ	iGaTqP	= GaTqP-Parms
-.equ	iGaTqI	= GaTqI-Parms
-.equ	iLimTrq	= LimTrq-Parms
-.equ	iGaEG	= GaEG-Parms
-.equ	iMvSpd	= MvSpd-Parms
-.equ	iMvAcc	= MvAcc-Parms
-.equ	iCtPos	= CtPos-Parms
-.equ	iCtSub	= CtSub-Parms
-.equ	iPvInt	= PvInt-Parms
-.equ	iPvPos	= PvPos-Parms
-.equ	iOvTmr	= OvTmr-Parms
-.equ	iMode	= Mode-Parms
-
+iLimSpd	= LimSpd-Parms
+iGaSpd	= GaSpd-Parms
+iGaTqP	= GaTqP-Parms
+iGaTqI	= GaTqI-Parms
+iLimTrq	= LimTrq-Parms
+iGaEG	= GaEG-Parms
+iMvSpd	= MvSpd-Parms
+iMvAcc	= MvAcc-Parms
+iCtPos	= CtPos-Parms
+iCtSub	= CtSub-Parms
+iPvInt	= PvInt-Parms
+iPvPos	= PvPos-Parms
+iOvTmr	= OvTmr-Parms
+iMode	= Mode-Parms
 
 ; Host command
-RxBuf:	.byte	2+16	; Serial receive buffer (Rp, Wp, Buff[16])
-LineBuf:.byte	20	; Command line input buffer
+RxBuf:	.fill	2+16	; Serial receive buffer (Rp, Wp, Buff[16])
+LineBuf:.fill	20	; Command line input buffer
 
 
 
 ;----------------------------------------------------------;
 ; Program code
 
-.cseg
+.text
 .org 0
 
-.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
+#if defined(__AVR_ATtiny2313__) || defined(__AVR_ATtiny2313A__)
 	; Interrupt Vectors (ATtiny2313)
 	rjmp	reset		;Reset
 	rjmp	0		;INT0
@@ -185,33 +187,36 @@ LineBuf:.byte	20	; Command line input buffer
 ;	rjmp	0		;WDT
 
 
-.elif __FLASH_SIZE__ <= 0x1000
+#elif __FLASH_SIZE__ <= 0x1000
 	; Interrupt Vectors (for all AVR with up to 4kB flash, use rjmp)
 	rjmp	reset		;Reset
 .org OC0Aaddr
 	rjmp	background	;TC0 COMPA
 .org URXCaddr
+.org 
 	rjmp	rxint		;USART0 Rx ready
 .org INT_VECTORS_SIZE
 				; leave the rest of the table empty
 
-.else
+#else
 	; Interrupt Vectors (for all AVR with more than 4kB flash, use jmp)
 	jmp	reset		;Reset
-.org OC0Aaddr
+;.org OC0Aaddr
+.org TIMER0_COMPA_vect_num * 4;
 	jmp	background	;TC0 COMPA
-.org URXCaddr
+;.org URXCaddr
+.org USART_RX_vect_num * 4;
 	jmp	rxint		;USART0 Rx ready
 .org INT_VECTORS_SIZE
 				; leave the rest of the table empty
 
-.endif
+#endif
 
 
 reset:
 	outi	SPL, low(RAMEND)	;Stask ptr
 	clr	_0			;Clear RAM
-	ldiw	Y, RAMTOP		;
+	ldiw	YL, RAMTOP		;
 b001:	st	Y+, _0			;
 	cpi	YL, low(RAMTOP+128)	;
 	brne	b001			;/
@@ -219,16 +224,17 @@ b001:	st	Y+, _0			;
 	outi	PORTD, 0b01111111	;Initialize PORTD
 	outi	DDRD,  0b00000010	;/
 
-.if (__DEVICE__ == __ATtiny2313__) || (__DEVICE__ == __ATtiny2313A__)
+#if defined(__AVR_ATtiny2313__) || defined(__AVR_ATtiny2313A__) || \
+    defined(__AVR_AT90S2313__)
 	outi	PORTB, 0b10000000	;Initialize PORTB
 	outi	DDRB,  0b11111111	;/
-.elif (__DEVICE__ == __ATmega328P__)
+#elif defined(__AVR_ATmega328__) || defined(__AVR_ATmega328P__)
 	outi	PORTB, 0b00100000	;Initialize PORTB
 	outi	DDRB,  0b11111111	;/
 
 	out	PORTC, _0		;Initialize PORTC
 	outi	DDRC,  0b00001100	;/
-.endif
+#endif
 
 	ldiw	A, SYSCLK/16/BPS-1	;UART
 	outw	UBRR, A			;
@@ -258,15 +264,15 @@ b001:	st	Y+, _0			;
 	ldi	AL, 0			;Initial servo mode = 0
 	 rcall	init_servo		;/
 
-	ldiw	Z, m_start*2		;Start up message
+	ldiw	ZL, m_start		;Start up message
 	 rcall	dp_str			;/
 
 
 ;----------------------------------------------------------;
 ; Command processing loop
 
-main:
-	ldiw	Z, m_prompt*2	;Display command prompt
+mainloop:
+	ldiw	ZL, m_prompt	;Display command prompt
 	 rcall	dp_str		;/
 	 rcall	get_line	;Get a command line
 	ld	BH,X+		;BH = command char
@@ -274,7 +280,7 @@ main:
 	brcs	b02		;
 	subi	BH,0x20		;/
 b02:	cpi	BH,' '		;Null line ?
-	brlt	main		;
+	brlt	mainloop	;
 	cpi	BH,'J'		;Jump?
 	rjeq	do_jump		;
 	cpi	BH,'G'		;Go?
@@ -292,9 +298,9 @@ b02:	cpi	BH,' '		;Null line ?
 	cpi	BH, 'P'		;Set parms?
 	breq	do_parm		;
 
-cmd_err:ldiw	Z,m_error*2	;Syntax error
+cmd_err:ldiw	ZL,m_error	;Syntax error
 	 rcall	dp_str
-	rjmp	main
+	rjmp	mainloop
 
 
 ;------------------------------------------------;
@@ -304,10 +310,10 @@ do_mode:	; Change servo mode
 	 rcall	get_val
 	breq	cmd_err
 	 rcall	init_servo
-	rjmp	main
+	rjmp	mainloop
 
 do_sub:	; Set subcommand reg.
-	ldiw	Y, CtSub
+	ldiw	YL, CtSub
 	rjmp	ds_set
 
 do_parm:	; Set parameters
@@ -318,7 +324,7 @@ do_parm:	; Set parameters
 	lsl	AL
 	mov	YL, AL
 	clr	YH
-	subiw	Y, -Parms
+	subiw	YL, -(Parms)		; brackets required for relocation
 ds_set:	 rcall	get_val
 	brcs	cmd_err
 	brne	ds_st
@@ -336,9 +342,11 @@ ds_set:	 rcall	get_val
 	brcs	cmd_err
 	breq	b03
 ds_st:	cli
-	stdw	Y+0, A
+;	stdw	Y+0, A
+	std	Y+1, AH
+	std	Y+0, AL
 	sei
-b03:	rjmp	main
+b03:	rjmp	mainloop
 
 
 
@@ -353,7 +361,7 @@ do_reep:	; Load parameters from EEPROM
 	cli
 	 rcall	load_parms
 	sei
-	rjmp	main
+	rjmp	mainloop
 
 
 do_weep:	; Save parameters into EEPROM
@@ -374,7 +382,7 @@ b04:	sbic	EECR, EEPE
 	sei
 	dec	AH
 	brne	b04
-	rjmp	main
+	rjmp	mainloop
 
 
 load_parms:
@@ -396,7 +404,7 @@ b06:	subi	AL, 1
 	brcs	b07
 	add	BH, AH
 	rjmp	b06
-b07:	ldiw	Y, Parms
+b07:	ldiw	YL, Parms
 	ret
 
 
@@ -417,7 +425,7 @@ dp_p:	ldi	AL, 0x0d	;Show position counter
 	ldi	AL, ' '		;
 	 rcall	xmit		;/
 b08:	 rcall	receive		;Break if any key was pressed
-	rjne	main		;/
+	rjne	mainloop		;/
 	cp	T0H, _PosL	;Continue if not changed
 	breq	b08		;/
 	rjmp	dp_p
@@ -427,44 +435,24 @@ b08:	 rcall	receive		;Break if any key was pressed
 ;------------------------------------------------;
 ; Change position command reg. immediataly.
 
-; if (!get_val()) goto cmd_err;
-; CtPos = val;
-; goto main;
 do_jump:
 	 rcall	get_val
 	rjeq	cmd_err
-	ldiw	Z, CtPos	;Set position command reg.
+	ldiw	ZL, CtPos	;Set position command reg.
 	cli			;
 	stdw	Z+0, A		;
 	std	Z+2, BL		;
 	sei			;/
-	rjmp	main
+	rjmp	mainloop
 
 
 
 ;------------------------------------------------;
 ; Go at trapezoidal/rectanguler velocity profile.
-;
-; local variables: (24 bit, LSB first in list)
-; T0H:T2	current position (kind of loop variable) (s24.8)
-; T4:T6L	start position (s24)
-; A:BL		target position (s24)
-; BH:C		velocity (u16.8)
-; D:EL		next important point on ramp (midpoint, start of end ramp)
-; Tflag		direction of movement (b1)
 
-; 		T4:T6L = CtPos;	// s24
-; cur_pos T0:T2  = CtPos << 8;	// s32 (wirklich?)
-; cur_pos T0H:T2 = CtPos;	// s24 (wirklich?)
-; if (get_val())
-; {
-;   if (val==0) goto dg_0();
-;   if (val==1) goto dg_1();
-; }
-; goto cmd_err;
 do_go:
-	ldiw	Z, CtPos	;Z -> Position command reg.
-	lddw	T4, Z+0		;T6L:T4 = start position
+	ldiw	ZL, CtPos	;Z -> Position command reg.
+	lddw	T4L, Z+0	;T6L:T4 = start position
 	ldd	T6L, Z+2	;/
 	mov	T0H, T4L	;r3:r0 = commanded position
 	mov	T2L, T4H	;
@@ -500,35 +488,24 @@ b010:	 rcall	dg_add		;---Constant velocity loop
 	rjmp	dg_end		;/
 
 ; Trapezoidal velocity profile
-; if (!get_val()) goto cmd_err;
 dg_0:	 rcall	get_val		;BL:A = target posision
 	rjeq	cmd_err		;/
-; Tflag = (val<start_pos)//(val<T4:T6L)	// Tflag = direction of movement
-; // 0 = forward (positive), 1 = backward (negative)
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
 	clt			;
 	brge	b011		;
 	set			;/
-; // BH:C is start velocity (24 bit)
-; velocity = 0;
 b011:	clr	r0		;
 	clr	BH		;CL:BH = start velocity
 	clrw	C		;/
 
-; do {
-;   velocity += MvAcc;
 dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	add	BH, DL		;Increase velocity
 	lds	DL, MvAcc+1	;
 	adc	CL, DL		;
 	adc	CH, _0		;/
-;   if (!dg_add()) goto dg_end;
 	 rcall	dg_add
 	brge	dg_end
-;   // A:BL is target position
-;   // T4:T6L is start position
-;   D:EL = (target - start)/2 + start;
 	movw	DL, AL		;Check current position has passed half of distance.
 	mov	EL, BL		;If passed, enter to down ramp.
 	sub	DL, T4L		;
@@ -538,33 +515,22 @@ dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	rorw	D		;
 	addw	D, T4		;
 	adc	EL, T6L		;
-
-;   if (direction) {	// if (Tflag) {
 	brts	b40		;
-;     if (cur_pos >= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 	cp	T0H, DL		;
 	cpc	T2L, DH		;
 	cpc	T2H, EL		;
 	brge	dg_de		;
 	rjmp	b41		;
-;   } else {
-;     if (cur_pos <= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 b40:	cp	DL, T0H		;
 	cpc	DH, T2L		;
 	cpc	EL, T2H		;
 	brge	dg_de		;/
-;   }
-; } while (velocity < MvSpd);
 b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cp	BH, DL		;If reached, enter constant velocity mode.
 	cpc	CL, DH		;
 	cpc	CH, _0		;
 	brlo	dg_ul		;/
 
-; // Calculate down ramp point:
-; // up ramp width was (cur_pos-start_pos)
-; // down ramp beginns at target - up_ramp_width = target - (cur-start)
-; EL:D ramp_point = start_pos - cur_pos + target_pos
 	movw	DL, T4L		;Calcurate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
@@ -572,29 +538,19 @@ b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	sbc	EL, T2H		;
 	addw	D, A		;
 	adc	EL, BL		;/ EL:DL = s.p. - c.p. + t.p.
-; do {
-;   dg_add();
 dg_cl:	 rcall	dg_add		;---Constant velocity loop
-;   if (direction==0) {		//Tflag==0) {
 	brts	b42
-;     if (cur_pos >= ramp_point) break; {// if (T0H:T2 >= EL:D) break;
 	cp	T0H, DL
 	cpc	T2L, DH
 	cpc	T2H, EL
 	brge	dg_de
 	rjmp	dg_cl
-;   } else {
-;     if (ramp_point >= cur_pos) break; {// if (EL:D < T0H:T2) goto dg_cl
 b42:	cp	DL, T0H
 	cpc	DH, T2L
 	cpc	EL, T2H
 	brlt	dg_cl
-; } // do
-; dg_add();
+
 dg_de:	 rcall	dg_add
-; while ((velocity-=MvAcc) >= 0) {
-;   if (dg_add()==0) break;
-; }
 dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	sub	BH, DL		;Decrese velocity
 	lds	DL, MvAcc+1	;
@@ -604,22 +560,10 @@ dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	 rcall	dg_add
 	brlt	dg_dl
 
-; block_irq();
-; CtPos = target_pos;
 dg_end:				; End of action
 	cli
 	stdw	Z+0, A
 	std	Z+2, BL
-; while (block_irq(), Pos!=target_pos) {
-;   allow_irq();
-;   if (receive()
-
-; // irq blocking is not exactly right in the C translation
-; do {
-;   block_irq();
-;   if (cur_pos == target_pos) break;
-;   allow_irq();
-; } while (receive()==0);
 dge_lp:	cli			; Wait until position stabled
 	cpw	_Pos, A
 	cpc	_PosX, BL
@@ -629,19 +573,10 @@ dge_lp:	cli			; Wait until position stabled
 	 rcall	receive
 	pop	AL
 	breq	dge_lp
-; goto main;
-b43:	rjmp	main
+b43:	rjmp	mainloop
 
 
-;
-; do one 1ms step with the current velocity
-;
-; wait for 1kHz time interval without any torque flags set.
-; advance cur_pos by (velocity)
-; if that does not overrun the target position, advance CtPos by (velocity)
-;
-; returns: s-flag=1, N^V=1: all ok
-;          N^V=0: overun the target position (brge will catch this)
+
 dg_add:
 	cbr	_Flags, bit7	;Wait for 1kHz time interval
 b44:	push	AL		;
@@ -656,48 +591,36 @@ b45:	pop	AL		;
 	rjmp	dg_add		;
 	sbrc	_Flags, 5	;
 	rjmp	dg_add		;/
-; if (direction == 0) {		// if (Tflag==0) {
-;   cur_pos += velocity;	//T2:T0 += BH:C
 	brts	b46		;Increase commanded point by current velocity
 	add	T0L, BH		;
 	adc	T0H, CL		;
 	adc	T2L, CH		;
 	adc	T2H, CH		;
-;   if (cur_pos >= target) return 0;
 	cp	T0H, AL		;
 	cpc	T2L, AH		;
 	cpc	T2H, BL		;
 	brge	dga_ov		;
 	rjmp	b47		;
-; } else {
-;   cur_pos -= velocity;	//T2:T0 -= C:BH
 b46:	sub	T0L, BH		;
 	sbc	T0H, CL		;
 	sbc	T2L, CH		;
 	sbc	T2H, CH		;
-;   if (cur_pos <= target) return 0;
 	cp	AL, T0H		;
 	cpc	AH, T2L		;
 	cpc	BL, T2H		;
 	brge	dga_ov		;/
-; }
-; BEGIN_CRITICAL
-; CtPos = cur_pos >> 8;
-; END_CRITICAL;
 b47:	cli
 	std	Z+0, T0H
 	stdw	Z+1, T2
 	sei
-; return (1);
 	ses
 dga_ov:	ret
-; }
 
 dga_stop:
 	pop	AL
 	pop	AL
 	pop	AL
-	rjmp	main
+	rjmp	mainloop
 
 
 
@@ -709,7 +632,7 @@ dga_stop:
 init_servo:
 	cli
 	sts	Mode, AL	;Set servo mode
-	ldiw	Y, CtPos	;Clear cmmand regs and servo operators.
+	ldiw	YL, CtPos	;Clear cmmand regs and servo operators.
 b012:	st	Y+, _0		;
 	cpi	YL, low(CtPos+11);
 	brne	b012		;/
@@ -726,48 +649,20 @@ b012:	st	Y+, _0		;
 ;----------------------------------------------------------;
 ; 83kHz Position capture and servo operation interrupt
 
-
-; part 1: position capture
-;
-
-; input: PIND
-; sideeffects/global variables:
-; - PvEnc: previous A/B signal (r/w)
-; - Pos/PosX: update the current position (r/w)
-; - saved registers: T0L, SREG, Z (left on stack)
-; modified registers: Z
-
 background:
 	push	T0L
-	pushw	Z
+	pushw	ZL
 	in	T0L, SREG		;Save flags
 
-; ZL = PvEnc;
 	mov	ZL, _PvEnc		;ZL[1:0] = previous A/B signal
-; PvEnc = swap(PIND);
 	in	_PvEnc, PIND		;Sample A/B signal into _PvEnc[1:0]
 	swap	_PvEnc			;/
-; if (PvEnc & 2) PvEnc ^= 1;
 	ldi	ZH, 1			;Convert it to sequencial number.
 	sbrc	_PvEnc, 1		;
 	eor	_PvEnc, ZH		;/
-; ZL = (ZL - PvEnc) & 3;
 	sub	ZL, _PvEnc		;Decode motion
 	andi	ZL, 3			;/
-; if (ZL) {
 	breq	enc_zr			;-> Not moved
-;   if (ZL == 3) {
-;     // enc_rev
-;     PvDir = -1;
-;     Pos--;
-;   } else if (ZL == 1) {
-;     // enc_fwd
-;     PvDir = 1;
-;     Pos++;
-;   } else {
-;     // missing code recovery
-;     Pos += 2*PvDir;
-;   }
 	cpi	ZL, 3			;
 	breq	enc_rev			;-> -1 count
 	cpi	ZL, 1			;
@@ -777,16 +672,12 @@ background:
 	lsl	ZL			;
 	asr	ZH			;/
 	rjmp	enc_add
-enc_rev:ldiw	Z, -1
+enc_rev:ldiw	ZL, -1
 	rjmp	b013
-;     } // if (ZL!=1)
-enc_fwd:ldiw	Z, 1
+enc_fwd:ldiw	ZL, 1
 b013:	mov	_PvDir, ZL
-enc_add:addw	_Pos, Z
+enc_add:addw	_Pos, ZL
 	adc	_PosX, ZH
-; } // if (ZL)
-
-; if (--CtDiv) return;
 enc_zr:
 	dec	_CtDiv		;Decrement 1/83 divider
 	rjne	bgnd_exit	;If not overflow, exit interrupt routine.
@@ -794,7 +685,6 @@ enc_zr:
 ; End of 83 kHz position captureing process. Follows are 1kHz servo
 ; operation. It will be interrupted itself, but will not be re-entered.
 
-; CtDiv = 83;
 	ldi	ZL, 83		;Re-initialize 1/83 divider
 	mov	_CtDiv, ZL	;/
 	sei			;Enable interrupts
@@ -804,13 +694,11 @@ enc_zr:
 	pushw	B
 	pushw	C
 	push	DL
-	pushw	Y
-	ldiw	Y, Parms	;Work area base pointer
+	pushw	YL
+	ldiw	YL, Parms	;Work area base pointer
 
 	sbr	_Flags, bit7	; 1kHz interrupt flag
 
-; T2 = Pos - PvPos;
-; PvPos = Pos;
 	lddw	T2, Y+iPvPos	;Detect velocity
 	cli			;
 	subw	T2, _Pos	;
@@ -818,7 +706,6 @@ enc_zr:
 	sei			;
 	negw	T2		;/ T2 = velocity
 
-;
 	ldd	AL, Y+iMode	;Branch by servo mode
 	cpi	AL, 3		;Mode3?
 	breq	tap_position	;/
@@ -838,8 +725,6 @@ tap_position:
 	sbc	BH, _PosX	;
 	sei			;BH:T0 = position error
 
-; if (pos_error >= LimSpd) pos_error = LimSpd;
-; else if (pos_error <= -LimSpd) pos_error = -LimSpd;
 	lddw	A, Y+iLimSpd	;Velocity limit (P0)
 	clr	BL		;
 	cpw	T0, A		;
@@ -852,51 +737,36 @@ tap_position:
 	brge	tap_velocity	;
 b10:	movw	T0L, AL		;T0 = velocity command
 
-; output a velocity value (mode 2)
-;
 
-; input:
-; - T0: desired velocity value
-; - T2: current velocity (in pules/ms)
-; - Y: pointer to motor parameter block
-; output:
-; - T0: next torque value
-; modified registers: A, B, Z
 tap_velocity:
-; T0 -= speed{T2} * P1
 	movw	AL, T2L		;Velocity loop gain (P1)
 	lddw	B, Y+iGaSpd	;
 	 rcall	muls1616	;B = scaled velocity
 	subw	T0, B		;T0 = velocity error
 
-; Z = T0 * GaTqP			; P term P2
 	movw	AL, T0L		;Velocity error P-gain (P2)
 	lddw	B, Y+iGaTqP	;
 	 rcall	muls1616	;
 	movw	ZL, BL		;Z = P term;
 
-; Z += PvInt * GaTqI			; I term P3
 	lddw	A, Y+iPvInt	;Velocity error I-gain (P3)
 	lddw	B, Y+iGaTqI	;
 	 rcall	muls1616	;
-	addw	Z, B		;Z += I term;
+	addw	ZL, B		;Z += I term;
 
-; if (Z>= LimTrq) {Z=LimTrq; set_flag(6);}	;Torque limit P4 (LimTrq)
 	cbr	_Flags, bit6+bit5;Torque limit (P4)
 	lddw	B, Y+iLimTrq	;
-	cpw	Z, B		;
+	cpw	ZL, B		;
 	brlt	b20		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit6	;
-; if (Z< -LimTrq) {Z=-LimTrq; set_flag(5);}
 b20:	neg	BL		;
 	com	BH		;
-	cpw	Z, B		;
+	cpw	ZL, B		;
 	brge	b21		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit5	;/
 
-; if ( ((T0<0)&&!flag(5)) || ((T0>=0)&&!flag(6)) ) PvInt += T0;
 b21:	tst	T0H		;PvInt += T0, with anti-windup
 	brmi	b22		;
 	sbrc	_Flags, 6	;
@@ -904,48 +774,12 @@ b21:	tst	T0H		;PvInt += T0, with anti-windup
 	rjmp	b23		;
 b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
-; PvInt += T0
 b23:	lddw	A, Y+iPvInt	;
-;-- addition: decay for the integral value after steady state is reached
-;   (useful for static positioning applications like XY-tables)
-; if (T0 || T2) A+=T0
-; else {B=(A>>6); A-=B}
+	addw	A, T0		;
+	stdw	Y+iPvInt, A	;/
 
-	mov	BL, T0L		; check for (T0==0)&&(T2==0)
-	or	BL, T0H
-	or	BL, T2L
-	or	BL, T2H
-	brne	b28
-	movw	BL, AL		; B = A>>5
-	asr	BH,1
-	ror	BL
-	asr	BH,1
-	ror	BL
-	asr	BH,1
-	ror	BL
-	asr	BH,1
-	ror	BL
-	asr	BH,1
-	ror	BL
-	subw	A, B		; A -= B;
-	rjmp	b29
-;--
-b28:	addw	A, T0		;
-b29:	stdw	Y+iPvInt, A	;/
-; if (flags(5) || flags(6)) {
-;   led_on(LED_TORQUE);
-; } else {
-;   led_off(LED_TORQUE);
-;   if (OvTmr-1)>0) {
-;     OvTmr--;
-;     if (OvTmr >= TL_TIME) goto servo_error;
-;   }
-; }
-; T0 = Z
-;
 b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
-;AL is overwritten right away, but the CPU flags survive
 	lddw	A, Y+iOvTmr	; works, decreased by 1 when no torque limit.
 	breq	b25		; When the value reaches TL_TIME, servo turns
 	led_on	LED_TORQUE	; off and goes error state.
@@ -961,17 +795,7 @@ b26:	stdw	Y+iOvTmr, A	;
 
 b27:	movw	T0L, ZL		;T0 = torque command
 
-; output a torque/current value (mode 1)
-;
-; current_PWM{T0} += speed{T2}*P5;
-;
-; input:
-; - T2: current velocity (in pules/ms)
-; - Y: pointer to motor parameter block
-; - T0: current PWM value (left over from the last round)
-; output:
-; - T0: next PWM value
-; modified registers: A, B
+
 tap_torque:
 	movw	AL, T2L		;EG compensation (P5)
 	lddw	B, Y+iGaEG	;
@@ -979,18 +803,6 @@ tap_torque:
 	addw	T0, B		;T0 = voltage command
 
 
-; output a PWM value (mode 0)
-;
-; clip T0 to [-240;240]
-; OCR1A = (T0/2) + 120;
-; OCR1B = 120 - (T0/2);
-;
-; input:
-; - T0: value to output.
-;
-; valid outputs and side effects:
-;
-; modified registers: A
 tap_voltage:
 	ldiw	A, 240		;Clip output voltage between -240 and +240.
 	cpw	T0, A		; Limit minimum duty ratio to 15/16 for bootstrap
@@ -1015,7 +827,7 @@ b31:	asrw	T0		;Set PWM register (OCR1A and ~OCR1B)
 
 	 rcall	disp_pos
 
-	popw	Y
+	popw	YL
 	pop	DL
 	popw	C
 	popw	B
@@ -1025,7 +837,7 @@ b31:	asrw	T0		;Set PWM register (OCR1A and ~OCR1B)
 
 bgnd_exit:			;End of encoder capture and servo operation
 	out	SREG, T0L	;Restore flags
-	popw	Z
+	popw	ZL
 	pop	T0L
 	reti
 
@@ -1061,7 +873,7 @@ disp_pos:
 	adc	AL,_0
 	adc	AH,_0
 	adc	BL,_0
-b50:	ldiw	Y,Disp
+b50:	ldiw	YL,Disp
 dp_l1:	ldi	CL,24
 	ldi	BH,0
 dp_l2:	lsl	AL
@@ -1074,7 +886,7 @@ dp_l2:	lsl	AL
 	inc	AL
 b51:	dec	CL
 	brne	dp_l2
-	ldiw	Z,t_7seg*2
+	ldiw	ZL,t_7seg
 	add	ZL,BH
 	adc	ZH,_0
 	lpm	CL,Z
@@ -1089,7 +901,7 @@ b52:	st	Y+,CH
 	brne	b52
 	clr	DL
 
-.ifdef USIDR
+#ifdef USIDR
 ; This code uses the USI device of the tiny2313.
 ; - write data to USIDR
 ; - double-toggle USCK 8 times to shift out the data
@@ -1115,11 +927,11 @@ b54:	out	USIDR,AH
 	sbi	PORTB,5
 	cbi	PORTB,5
 	ret
-.else
+#else
 ;FIXME: add SPI code for ATmega.
 dp_out:
 	ret
-.endif
+#endif
 
 
 
@@ -1159,19 +971,16 @@ b63:	ret
 
 ;--------------------------------------;
 ; Input a command line into LineBuf.
-;
-; returns:
-; - BH: number of char in buffer
-; - X: pointer to LineBuf
+
 get_line:
-	ldiw	X,LineBuf
+	ldiw	XL,LineBuf
 	ldi	BH,0
 rl_lp:	 rcall	receive
 	breq	rl_lp
 	st	X,AL
 	cpi	AL,0x0d	; CR
 	brne	b80
-	ldiw	X,LineBuf
+	ldiw	XL,LineBuf
 	rjmp	echo
 b80:	cpi	AL,0x08	; BS
 	brne	b81
@@ -1339,8 +1148,8 @@ b90:
 
 receive:; Receive a char into AL. (ZR=no data)
 	push	AH
-	pushw	Y
-	ldiw	Y, RxBuf
+	pushw	YL
+	ldiw	YL, RxBuf
 	cli
 	ldd	AH, Y+0
 	ldd	AL, Y+1
@@ -1354,7 +1163,7 @@ receive:; Receive a char into AL. (ZR=no data)
 	std	Y+0, AH
 	clz
 b91:	sei
-	popw	Y
+	popw	YL
 	pop	AH
 	ret
 
@@ -1374,8 +1183,8 @@ rxint:	;USART0 Rx ready
 .endif
 	sei
 ;	pushw	A		; moved to an earlier position
-	pushw	Y
-	ldiw	Y, RxBuf
+	pushw	YL
+	ldiw	YL, RxBuf
 	ldd	AL, Y+0
 	ldd	AH, Y+1
 	inc	AH
@@ -1387,7 +1196,7 @@ rxint:	;USART0 Rx ready
 	andi	AH, 15
 	add	YL, AH
 	std	Y+2, BL
-b92:	popw	Y
+b92:	popw	YL
 	popw	A
 	pop	BL
 	out	SREG, AL
@@ -1408,9 +1217,12 @@ b92:	popw	Y
 ;----------------------------------------------------------;
 ; Strings
 
-m_prompt:	.db	13,10, "%", 0
-m_error:	.db	10, "?", 0
-m_start:	.db	13,10, "SMC type 3", 13,10, 0
+		.balign	2
+m_prompt:	.string	"\r\n%"
+		.balign	2
+m_error:	.string	"\n?"
+		.balign	2
+m_start:	.string	"\r\nSMC type 3\r\n"
 
-t_7seg:		.db	0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F
-
+		.balign	2
+t_7seg:		.byte	0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F
