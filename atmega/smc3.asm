@@ -311,16 +311,22 @@ do_sub:	; Set subcommand reg.
 	rjmp	ds_set
 
 do_parm:	; Set parameters
+; if (get_val()) goto cmd_err;
 	 rcall	get_val
 	breq	cmd_err
+; if (val >= N_PARM) goto cmd_err;
 	cpi	AL, N_PARM
 	brcc	cmd_err
+; Y = &Parms[val];
 	lsl	AL
 	mov	YL, AL
 	clr	YH
 	subiw	Y, -Parms
+; c = get_val();
 ds_set:	 rcall	get_val
+; if (c == 2) goto cmd_err;
 	brcs	cmd_err
+; if (c == 1) {
 	brne	ds_st
 	ldi	AL, 0x0a
 	 rcall	xmit
@@ -335,6 +341,8 @@ ds_set:	 rcall	get_val
 	 rcall	get_val
 	brcs	cmd_err
 	breq	b03
+; }
+; *Y = A;
 ds_st:	cli
 	stdw	Y+0, A
 	sei
@@ -1198,12 +1206,11 @@ b81:	cpi	AL,' '		; SP
 ; Call: Z = top of the string (ASCIZ)
 ; Ret:  Z = next string
 
+b82:	 rcall	xmit
 dp_str:	lpm	AL, Z+
 	tst	AL
 	brne	b82
 	ret
-b82:	 rcall	xmit
-	rjmp	dp_str
 
 
 ;--------------------------------------;
@@ -1219,24 +1226,40 @@ b82:	 rcall	xmit
 ;  Negative:   "-125000"
 
 get_val:
+; flag_neg = 0;	// use T as flag for negative value
 	clt
+; val = 0;
 	clr	AL
 	clr	AH
 	clr	BL
+; do {
+;   BH = *X++;
 b83:	ld	BH,X+
+;   if (BH < ' ') return (c1z0);	// return empty line
 	cpi	BH,' '
 	brcs	gd_n
 	breq	b83
+; } while (BH == ' ');			// ignore spaces
+; if (BH == '-') {
+;	flag_neg = 1;
+;	BH = *X++;
+; }
 	cpi	BH,'-'
 	brne	b84
 	set
-gd_l:	ld	BH,X+
+gd_l:	ld	BH,X+		; in C this would be at the end of loop
+; do {
+;   if (BH <= ' ') goto gd_e;	// found end of number, return success
 b84:	cpi	BH,' '+1
 	brcs	gd_e
+;   BH -= '0';
 	subi	BH,'0'
-	brcs	gd_x
+;   if (BH < 0) goto gd_x;	// return syntax error
+	brcs	gd_x	; could be left out, this is covered by the next compare.
+;   if (BH >= 10) goto gd_x;	// return syntax error
 	cpi	BH,10
 	brcc	gd_x
+;   val = val*10 + BH;		// this loop is a 24x8 bit multiplication
 	ldi	CL, 25
 	ldi	CH, 10
 	sub	r0, r0
@@ -1252,9 +1275,17 @@ b86:	dec	CL
 	adc	AH, _0
 	adc	BL, _0
 	rjmp	gd_l
+;   BH = *X++;		// implemented in assembler at the beginning
+; } while (1);
+; return (z1c1);	// return value for error
 gd_x:	sec
 	sez
 	ret
+; X--
+; if (flag_neg) {
+;	val = -val;
+; }
+; return (c0);		// return value for success
 gd_e:	sbiw	XL,1
 	brtc	b87
 	com	AL
@@ -1265,6 +1296,8 @@ gd_e:	sbiw	XL,1
 	sbci	BL,-1
 b87:	clc
 	ret
+; X--
+; return (z1c0);	// return value for empty line
 gd_n:	sbiw	XL,1
 	clc
 	sez
@@ -1278,36 +1311,74 @@ gd_n:	sbiw	XL,1
 ; Call: BL:A = 24bit signed value to be displayed
 ; Ret:  BL:A = broken
 
+; This implements the standard algorithmn for unsigned division Q,R=N/D with
+; N and Q both in BL:A, R in BH and D fixed to 10.
+;
+; Q := 0                  -- Initialize quotient and remainder to zero
+; R := 0                     
+; for i := n − 1 .. 0 do  -- Where n is number of bits in N
+;   R := R << 1           -- Left-shift R by 1 bit
+;   R(0) := N(i)          -- Set the least-significant bit of R equal to bit i of the numerator
+;   if R ≥ D then
+;     R := R − D
+;     Q(i) := 1
+;   end
+; end
+
 dp_dec:	ldi	CH,' '
+; CH = ' ';
+; if (val < 0) {
 	sbrs	BL, 7
 	rjmp	b88
+;   val = -val;
 	com	AL
 	com	AH
 	com	BL
 	adc	AL,_0
 	adc	AH,_0
 	adc	BL,_0
+;   CH = '-'
 	ldi	CH,'-'
+; }
+; // convert the value into an ASCII string on the stack
+; T0L = 0;
 b88:	clr	T0L		;digit counter
+; do {
+;   T0L++;
+;   BH = 0;
+;   CL=24;
 b088:	inc	T0L		;---- decimal string generating loop
 	clr	BH		;var1 /= 10;
 	ldi	CL,24		;
+;   do {
+;     var1 *= 2;
 b89:	lslw	A		;
 	rolw	B		;
+;     if ((var1 >> 24) >= 10) {
 	cpi	BH,10		;
 	brcs	b89a		;
+;       var1 -= (10<<24);
+;       var1++;
 	subi	BH,10		;
 	inc	AL		;
+;   } while (--CL);
 b89a:	dec	CL		;
 	brne	b89		;/
-	addi	BH,'0'		;Push the remander (a decimal digit)
+;   push(BH+'0');
+	addi	BH,'0'		;Push the remainder (a decimal digit)
 	push	BH		;/
+; } while (var1);
 	cp	AL,_0		;if(var1 =! 0)
 	cpc	AH,_0		; continue digit loop;
 	cpc	BL,_0		;
 	brne	b088		;/
+; // output the stored string in opposite order
+; xmit(CH);	// sign
 	mov	AL, CH		;Sign
 	 rcall	xmit		;/
+; do {
+;   xmit(pop());
+; } while (--T0L);
 b89b:	pop	AL		;Transmit decimal string
 	 rcall	xmit		;<-- Put a char to memory, console or any other display device
 	dec	T0L		;
@@ -1337,7 +1408,14 @@ b90:
 	ret
 .endif
 
-receive:; Receive a char into AL. (ZR=no data)
+; Receive a char into AL. (ZR=no data)
+;
+; modified regs: AL
+; return status: Z=1: no data, Z=0: data in AL valid
+; global variables:
+;   read: RxBuf: Rp, Wp, Buff
+;   write: Rp
+receive:
 	push	AH
 	pushw	Y
 	ldiw	Y, RxBuf
