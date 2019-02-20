@@ -43,15 +43,17 @@ void setup()
 	PORTD	= 0b01111111;	//	;Initialize PORTD
 	DDRD	= 0b00000010;
 
-#if defined(__ATtiny2313__) || defined(__ATtiny2313A__)
+#if defined(__AVR_ATtiny2313__) || defined(__AVR_ATtiny2313A__)
 	PORTB	= 0b10000000;	//	;Initialize PORTB
 	DDRB	= 0b11111111;
-#elsif defined(__ATmega328P__)
+#elif defined(__AVR_ATmega328__) || defined(__AVR_ATmega328P__)
 	PORTB	= 0b00100000;	//	;Initialize PORTB
 	DDRB	= 0b11111111;
 
 	PORTC	= 0;		//	;Initialize PORTC
 	DDRC	= 0b00001100;
+#else
+ #error "unknown CPU type"
 #endif
 
 	Serial.begin(BPS);
