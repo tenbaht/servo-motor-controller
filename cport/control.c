@@ -119,19 +119,85 @@ static inline int16_t tap_torque(int16_t T0)
  *
  * Clip output voltage between -240 and +240. Limit minimum duty ratio to
  * 15/16 for bootstrap type FET driver.
+ *
+ * NOTE: This function compiles quite inefficient for AVR. The direct
+ * translation of the original assembler code (v1) even blocks the CPU for
+ * negative values of T0 (it works with simavr, though)
+ * - v1: 64 bytes and blocking the CPU (too slow to finish in one interrupt?)
+ * - v2: 38 bytes, but doesn't work for T0>255 or T0<-255
+ * - v3: 46 bytes, works.
+ *
+ * Consider using the original assembler function instead. (42 bytes)
  */
 static inline void tap_voltage(int16_t T0)
+{ // v3: 0x1e-0x4c = 46 bytes
+	int8_t v;
+
+	// Clip output voltage between -240 and +240.
+	if (T0 >= 240) {
+		v = 120;
+	} else if (T0 < -240) {
+		v = -120;
+	} else {
+		v = T0/2;
+	}
+
+	OCR1AL = v + 120;
+	OCR1BL = 120 - v;
+}
+/*
+{ // v2: 0x1e-0x44 = 38 bytes. wrong output for abs(T0)>255 (clipping too early)
+	int8_t v;
+
+	v = T0/2;
+
+	// Clip output voltage between -240 and +240.
+	if (v >= 120) {
+		v=120;
+	} else if (v < -120) {
+		v=-120;
+	}
+
+	OCR1AL = v + 120;
+	OCR1BL = 120 - v;
+}
+*/
+/* // v1: 0x1e-0x5e = 64 bytes, blocks the UART for negative values. (why?)
 {
 	// Clip output voltage between -240 and +240.
 	if (T0 >= 240) {
 		T0=240;
-	} else if (T0 <= -240) {
+	} else if (T0 < -240) {
 		T0=-240;
 	}
 
-	OCR1A = (T0/2) + 120;
-	OCR1B = 120 - (T0/2);
+	OCR1AL = (T0/2) + 120;
+	OCR1BL = 120 - (T0/2);
 }
+*/
+/* 42 bytes:
+tap_voltage:
+	ldiw	A, 240		;Clip output voltage between -240 and +240.
+	cpw	T0, A		; Limit minimum duty ratio to 15/16 for bootstrap
+	brge	b30		; type FET driver.
+	ldiw	A, -240		;
+	cpw	T0, A		;
+	brge	b31		;
+b30:	movw	T0L, AL		;T0 = PWM command
+
+b31:	asrw	T0		;Set PWM register (OCR1A and ~OCR1B)
+	ldi	AL, 120		;
+	adc	AL, T0L		;
+	ldi	AH, 120		;
+	sub	AH, T0L		;
+.if OCR1AL < 0x40
+	out	OCR1AL, AL	;
+	out	OCR1BL, AH	;/
+.else
+	sts	OCR1AL, AL	;
+	sts	OCR1BL, AH	;/
+.endif
+*/
 
 void servo_operation()
 {
@@ -159,8 +225,8 @@ void servo_operation()
 		default: tap_voltage(T0);
 	}
 */
-	if (Mode>=3) T0 = tap_position();
-	if (Mode>=2) T0 = tap_velocity(T0);
-	if (Mode>=1) T0 = tap_torque(T0);
+//	if (Mode>=3) T0 = tap_position();
+//	if (Mode>=2) T0 = tap_velocity(T0);
+//	if (Mode>=1) T0 = tap_torque(T0);
 	tap_voltage(T0);
 }
