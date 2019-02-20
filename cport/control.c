@@ -1,5 +1,35 @@
-#include "cscm3.h"
+#include <avr/io.h>
+
+#include "csmc3.h"
 #include "control.h"
+
+
+static int16_t T2;	// current velocity
+
+/**
+ * Initialize servo system
+ *
+ * Zero out all status variables and turn off all LEDs.
+ */
+void init_servo(uint8_t mode)
+{
+	BEGIN_CRITICAL
+	Mode = mode;
+//	bzero(CtPos, &Mode-&CtPos);	// more efficient, but a little crude
+	CtPos =
+	CtSub =
+	PvInt =
+	PvPos =
+	OvTmr = 0;
+
+	Pos = 0;
+	END_CRITICAL
+
+	led_off(LED_ERROR);
+	led_off(LED_TORQUE);
+	led_off(LED_READY);
+}
+
 
 /**
  * postion control loop (mode 3)
@@ -8,9 +38,9 @@ static inline int16_t tap_position()
 {
 	int24_t T0;	// position error
 
-	block_irq();
+	BEGIN_CRITICAL
 	T0 = CtPos - Pos;
-	allow_irq();
+	END_CRITICAL
 
 	// clamp position error to LimSpd (P0)
 	if (T0 >= LimSpd) T0 = LimSpd;
@@ -36,7 +66,7 @@ static inline int16_t tap_position()
  */
 static inline int16_t tap_velocity(int16_t T0)
 {
-	static uint16_t	OvTmr;	// Torque limit timer (was signed in asm version)
+	int16_t	Z;
 
 	T0 -= T2 * GaSpd;		// error = desired_value - speed*P1
 	Z = T0*GaTqP + PvInt*GaTqI;	// Z = Pval*error + Ival*Isum
@@ -106,7 +136,6 @@ static inline void tap_voltage(int16_t T0)
 void servo_operation()
 {
 	int16_t T0;	// input value to the module
-	int16_t T2;	// current velocity
 
 	set_flag(7);		// 1kHz interrupt flag
 	BEGIN_CRITICAL

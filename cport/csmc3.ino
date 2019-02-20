@@ -4,7 +4,7 @@
  */
 
 #include "csmc3.h"
-//#include "control.h"
+#include "control.h"
 //#include "eeprom.h"
 //#include "uart.h"
 #include "cli.h"
@@ -17,6 +17,7 @@
 //;----------------------------------------------------------;
 //; Data memory area
 
+// this could be in control.c
 //; Servo / G command parameters
 uint16_t Parms[N_PARM];
 
@@ -24,9 +25,11 @@ uint16_t Parms[N_PARM];
 int24_t		CtPos;	// Position 		g/j	mode 3
 int16_t		CtSub;	// Sub command   	s	mode 0/1/2
 int16_t		PvInt;	// Integration register
-int16_t		PvPosM;	// Velocity detection register
+int16_t		PvPos;	// Velocity detection register
+uint16_t	OvTmr;	// Torque limit timer
 uint8_t		Mode;	// Servo Mode		m
 
+// this could be in encoder.c
 //; Status registers
 uint24_t	Pos;	// current position
 
@@ -71,7 +74,7 @@ void setup()
 #endif
 
 //FIXME	load_parm(0);		//	;Load servo parms form bank 0
-//FIXME	init_servo(0);		//	;Initial servo mode = 0
+	init_servo(0);		//	;Initial servo mode = 0
 	dp_str(m_start);	//	;Start up message
 }
 

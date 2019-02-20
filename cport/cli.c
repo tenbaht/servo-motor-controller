@@ -3,7 +3,7 @@
 #include "csmc3.h"
 #include "cli.h"
 #include "uart.h"
-//#include "control.h"
+#include "control.h"
 
 
 static const char m_prompt[] PROGMEM = "\r\n%";
@@ -35,9 +35,6 @@ uint24_t val;
 
 uint8_t LineBuf[20];	// Command line input buffer
 uint8_t *buf;		// read pointer into line buffer
-
-// dummy functions
-void init_servo(val){}
 
 //;----------------------------------------------------------;
 //; Command processing loop
@@ -146,13 +143,7 @@ static void ds_set(int16_t *ptr)
 {
 	uint8_t c;
 
-Serial_print_s("\r\nbuf=");
-Serial_print_i((int)buf);
-Serial_print_s("\r\n");
 	c = get_val();
-Serial_print_s("\r\nc=");
-Serial_print_i(c);
-Serial_print_s("\r\n");
 	if (c == 2) {
 		cmd_err();
 		return;
@@ -237,7 +228,7 @@ void dp_str(const char *pstr)	//	;Display string
 {
 	uint8_t c;
 
-	while (c=pgm_read_byte(pstr++)) {	// intentional assign
+	while ((c=pgm_read_byte(pstr++))) {	// intentional assign
 		xmit(c);
 	}
 }
