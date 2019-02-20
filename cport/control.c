@@ -88,7 +88,7 @@ static inline int16_t tap_velocity(int16_t T0)
 		PvInt += T0;
 	}
 
-	if (flags(5) || flags(6)) {
+	if (flag(5) || flag(6)) {
 		led_on(LED_TORQUE);
 		OvTmr += 3;
 	} else {

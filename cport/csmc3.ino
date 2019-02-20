@@ -4,10 +4,11 @@
  */
 
 #include "csmc3.h"
+#include "cli.h"
+#include "encoder.h"
 #include "control.h"
 //#include "eeprom.h"
 //#include "uart.h"
-#include "cli.h"
 
 /* --- global variables --------------------------------------------------- */
 
@@ -61,12 +62,19 @@ void setup()
 	TCCR1A	= 0b10100001;
 	TCCR1B	= 0b00000001;
 
-/*FIXME: we need to get into the Tim0 interrupt
+#ifdef USE_TIM2
+ #warning "using TIM2 instead of TIM0 for the background task"
+ 	OCR2A	= 2;			// TC2: 83kHz interval timer
+	TCCR2A	= (1<<WGM21);		// CTC mode
+	TCCR2B	= (1<<CS22);		// prescaler 1/64
+	TIMSK2	= (1<<OCIE2A);
+#else
 	outi	OCR0A, 2		;TC0: 83kHz interval timer
-	outi	TCCR0A, 0b00000010	;
-	outi	TCCR0B, 0b00000011	;
+	outi	TCCR0A, 0b00000010	;CTC mode (count up to OCR0A)
+	outi	TCCR0B, 0b00000011	;prescaler clk_io/64
 	outi	TIMSK, (1<<OCIE0A)	;/
-*/
+#endif
+
 #if defined(USICR)
 	USICR	= 0b00011100;	//	;USI: LED display
 #else
@@ -84,11 +92,10 @@ void setup()
 
 
 
-#if 0	//FIXME
 /**
  * Tim0 interrupt routine
  *
- * called 83.3 times per millisecond (divider 192@16MHz).
+ * called 83.3 times per millisecond (divider 192=3*64@16MHz).
  *
  * every time:
  * - Polls the position encoder, update the position counter
@@ -96,18 +103,30 @@ void setup()
  * - Calls the control loop
  * - updates the position display
  */
-void background ()
+//void background ()
+#ifdef USE_TIM2
+ #if defined(__AVR_ATtiny2313__)
+  ISR(TIM2_COMPA_vect)
+ #else
+  ISR(TIMER2_COMPA_vect)
+ #endif
+#else
+ #if defined(__AVR_ATtiny2313__)
+  ISR(TIM0_COMPA_vect)
+ #else
+  ISR(TIMER0_COMPA_vect)
+ #endif
+#endif
 {
 	static uint8_t CtDiv;
 
-	position_capture();
+//	position_capture();
 	if (--CtDiv == 0) {
 		CtDiv = 83;
 		servo_operation();	// once every ms
-		disp_pos();
+//		disp_pos();
 	}
 }
-#endif
 
 void loop()
 {

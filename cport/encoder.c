@@ -1,5 +1,15 @@
 
+#include <avr/io.h>
+
+#include "csmc3.h"
+#include "encoder.h"
 // --------
+
+// avr-gcc is smart enough to optimize this into a single swap command
+static unsigned char nibbleSwap(unsigned char a)
+{
+	return (a<<4) | (a>>4);
+}
 
 
 void position_capture()
@@ -9,7 +19,7 @@ void position_capture()
 	uint8_t ZL;
 
 	ZL = PvEnc;
-	PvEnc = swap(PIND);
+	PvEnc = nibbleSwap(PIND);
 	if (PvEnc & 2) PvEnc ^= 1;	// Convert it to sequencial number.
 	ZL = (ZL - PvEnc) & 3;		// Decode motion
 
@@ -28,4 +38,3 @@ void position_capture()
 		}
 	}
 }
-
