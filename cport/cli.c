@@ -97,9 +97,42 @@ void task_cli()
 
 void do_jump(){Serial_print_s(__func__);}
 void do_go(){Serial_print_s(__func__);}
-void do_loc(){Serial_print_s(__func__);}
 void do_reep(){Serial_print_s(__func__);}
 void do_weep(){Serial_print_s(__func__);}
+
+/**
+ * print the current location
+ *
+ * keep updating the output until a key press is received.
+ *
+ * It is sufficient to compare only the lower 8 bits of the position counter.
+ * To help the compiler avoiding an unneeded cast to int for the comparision
+ * the two temp variabes a and b are used. The (nonsense) variable assignments
+ * are cut out by the optimizer and never make it into the output.
+ */
+static void do_loc()
+{
+	int24_t	p;
+	uint8_t a,b;	// temp variables to help the compiler casting the type
+
+	Serial_print_s(__func__);
+	xmit(10);
+	do {
+		xmit(13);
+		BEGIN_CRITICAL
+		p = Pos;
+		END_CRITICAL
+		dp_dec(p);
+		xmit(32);
+		do {
+			if (Serial_available()) return;
+//		} while ((uint8_t)p == (uint8_t)Pos);	// cast does not work
+			a = (uint8_t) p;	// all this is optimized away
+			b = (uint8_t) Pos;
+		} while (a == b);	// and this results in a 8 bit compare
+	} while (1);
+}
+
 
 static void cmd_err(void)
 {

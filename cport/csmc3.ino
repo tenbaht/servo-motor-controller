@@ -122,7 +122,7 @@ void setup()
 {
 	static uint8_t CtDiv;
 
-//	position_capture();
+	position_capture();
 	if (--CtDiv == 0) {
 		CtDiv = 83;
 		servo_operation();	// once every ms
