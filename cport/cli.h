@@ -1,8 +1,23 @@
 /* gebrauchte Funktionen:
- * getval(): 0=kein Wert, 1=Wert ok. Wert ist in val
  */
 
-extern u24	val;
+#ifndef _CLI_H_
+#define _CLI_H_
 
-bool getval();
-void loop();
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//extern const char m_prompt[] PROGMEM;
+//extern const char m_error[] PROGMEM;
+//extern const char m_start[] PROGMEM;
+
+void task_cli(void);
+
+void dp_str(const char *pstr);	//	;Display string in flash
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

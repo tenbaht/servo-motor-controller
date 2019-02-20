@@ -3,33 +3,13 @@
  *
  */
 
-
-#include "cscm3.h"
-#include "control.h"
+#include "csmc3.h"
+//#include "control.h"
+//#include "eeprom.h"
+//#include "uart.h"
+#include "cli.h"
 
 /* --- global variables --------------------------------------------------- */
-
-
-//;----------------------------------------------------------;
-//; EEPROM Area
-
-//.eseg
-const struct control_s parameter_bank[4] = {
-	// Memory bank 0 : Yasukawa Electric UGTMEM-A1SA51
-//	{	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128},
-	// Mein DeskJet-Motor im XY-Tisch
-	{	 80, 0x0500, 0x0300, 0x00c0, 240,      9,     160, 128},
-
-	// Memory bank 1 : Yasukawa Electric UGTMEM-A1SA51
-	{	300, 0x0500, 0x0300, 0x00c0, 240, 0x0340,  0x2600, 128},
-
-	// Memory bank 2 : Tamagawa Seiki TS1410N1
-	{	300, 0x0800, 0x0300, 0x0060, 180, 0x0550,  0x1a00, 32},
-
-	// Memory bank 3 : Matsushita Electric MCN-14EAEC (6V, 40p/r)
-	{	200, 0x0800, 0x0a00, 0x0400, 200, 0x0840,  0x1400, 64}
-};
-
 
 
 
@@ -38,15 +18,7 @@ const struct control_s parameter_bank[4] = {
 //; Data memory area
 
 //; Servo / G command parameters
-//Parms:
-uint16_t	LimSpd;	// P0,Velocity limit		Integer
-uint16_t	GaSpd;	// P1,Velocity feedback gain	8.8 fixed point
-uint16_t	GaTqP;	// P2,Proportional gain		8.8 fixed point
-uint16_t	GaTqI;	// P3,Integral gain		8.8 fixed point
-uint16_t	LimTrq;	// P4,Torque limit		Integer
-uint16_t	GaEG;	// P5,EG feedback gain		8.8 fixed point
-uint16_t	MvSpd;	// P6,G0 velocity		Integer
-uint16_t	MvAcc;	// P7,G0 acceleration		Integer
+uint16_t Parms[N_PARM];
 
 //; Command/Servo registers
 int24_t		CtPos;	// Position 		g/j	mode 3
@@ -57,8 +29,9 @@ uint8_t		Mode;	// Servo Mode		m
 
 //; Status registers
 uint24_t	Pos;	// current position
-uint8_t		Flags=0;// 1kHz|Sat.F|Sat.R| | | |
 
+
+static const char m_start[] PROGMEM = "\r\nSMC type 3c\r\n";
 
 
 void setup()
@@ -97,8 +70,8 @@ void setup()
 //	;FIXME: initialize 3-wire SPI instead
 #endif
 
-	load_parm(0);		//	;Load servo parms form bank 0
-	init_servo(0);		//	;Initial servo mode = 0
+//FIXME	load_parm(0);		//	;Load servo parms form bank 0
+//FIXME	init_servo(0);		//	;Initial servo mode = 0
 	dp_str(m_start);	//	;Start up message
 }
 
@@ -108,7 +81,7 @@ void setup()
 
 
 
-
+#if 0	//FIXME
 /**
  * Tim0 interrupt routine
  *
@@ -130,4 +103,10 @@ void background ()
 		servo_operation();	// once every ms
 		disp_pos();
 	}
+}
+#endif
+
+void loop()
+{
+	task_cli();
 }

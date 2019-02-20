@@ -1,10 +1,15 @@
 # backup files
 *~
 *.bak
+# developer notes and scratchpad directory
+notes/
 # assember generated files
-build/
+build*/
 *.cof
 *.hex
 *.lst
 *.map
 *.obj
+*.i
+*.o
+*.s
