@@ -66,9 +66,9 @@ void setup()
 
 #ifdef USE_TIM2
  #warning "using TIM2 instead of TIM0 for the background task"
- 	OCR2A	= 2;			// TC2: 83kHz interval timer
 	TCCR2A	= (1<<WGM21);		// CTC mode
 	TCCR2B	= (1<<CS22);		// prescaler 1/64
+	OCR2A	= 2;			// TC2: 83kHz interval timer
 	TIMSK2	= (1<<OCIE2A);
 #else
 	outi	OCR0A, 2		;TC0: 83kHz interval timer
