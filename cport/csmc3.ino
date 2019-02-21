@@ -32,7 +32,7 @@ uint8_t		Mode;	// Servo Mode		m
 
 // this could be in encoder.c
 //; Status registers
-uint24_t	Pos;	// current position
+int24_t	Pos;		// current position
 
 
 static const char m_start[] PROGMEM = "\r\nSMC type 3c\r\n";

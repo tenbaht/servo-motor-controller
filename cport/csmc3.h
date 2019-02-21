@@ -115,7 +115,7 @@ extern uint16_t	OvTmr;	// Torque limit timer
 extern uint8_t	Mode;	// Servo Mode		m
 
 //; Status registers
-extern uint24_t	Pos;	// current position
+extern int24_t	Pos;	// current position
 #define Flags	GPIOR0	// 1kHz|Sat.F|Sat.R| | | |
 
 inline void clear_flag(uint8_t bit)
