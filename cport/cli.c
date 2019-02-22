@@ -96,7 +96,6 @@ void task_cli()
 */
 
 
-void do_jump(){Serial_print_s(__func__);}
 void do_go(){Serial_print_s(__func__);}
 
 
@@ -159,6 +158,24 @@ static void do_loc()
 			b = (uint8_t) Pos;
 		} while (a == b);	// and this results in a 8 bit compare
 	} while (1);
+}
+
+
+/**
+ *
+ * Change position command register immediately.
+ *
+ */
+
+void do_jump()
+{
+//	Serial_print_s(__func__);
+
+	if (get_val()) {
+		cmd_err();
+		return;
+	}
+	CtPos = val;
 }
 
 

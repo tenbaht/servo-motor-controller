@@ -124,9 +124,9 @@ void setup()
 
 	position_capture();
 	if (--CtDiv == 0) {
-		CtDiv = 83;
 		servo_operation();	// once every ms
 //		disp_pos();
+		CtDiv = 83;
 	}
 }
 
