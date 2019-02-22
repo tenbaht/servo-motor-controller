@@ -33,27 +33,33 @@ void init_servo(uint8_t mode)
 
 /**
  * postion control loop (mode 3)
+ *
+ * FIXME: compiles very inefficient
  */
 static inline int16_t tap_position()
 {
 	int24_t T0;	// position error
+	int24_t max;	// temp. variabe to ensure proper signiness
 
 	BEGIN_CRITICAL
 	T0 = CtPos - Pos;
 	END_CRITICAL
 
+	max = (int24_t) LimSpd;
 	// clamp position error to LimSpd (P0)
-	if (T0 >= LimSpd) T0 = LimSpd;
-	else if (T0 <= -LimSpd) T0 = -LimSpd;
+	if (T0 >= max) T0 = max;
+	else if (T0 <= -max) T0 = -max;
 
 	return (int16_t) T0;
 }
+
 
 /**
  * velocity control loop (mode 2)
  *
  * flag 5: lower torque limit active
  * flag 6: lower torque limit active
+ * FIXME: combine these two flags into one. That simplyfies everything.
  *
  * @parms:
  * T0:	desired velocity value. This value is expected to be already clamped
@@ -74,11 +80,11 @@ static inline int16_t tap_velocity(int16_t T0)
 	// torque limit (P4)
 	clear_flag(5);
 	clear_flag(6);
-	if (Z >= LimTrq) {
+	if (Z >= (int16_t) LimTrq) {	// force a signed compare
 		Z = LimTrq;
 		set_flag(6);
 	}
-	if (Z <= -LimTrq) {
+	if (Z <= (int16_t) -LimTrq) {	// force a signed compare
 		Z = -LimTrq;
 		set_flag(5);
 	}
