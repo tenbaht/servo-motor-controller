@@ -31,7 +31,7 @@ uint8_t get_line(void);
 
 // getval(): 0=kein Wert, 1=Wert ok. Wert ist in val
 uint8_t get_val();
-uint24_t val;
+int24_t val;
 
 
 uint8_t LineBuf[20];	// Command line input buffer

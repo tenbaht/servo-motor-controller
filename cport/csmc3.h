@@ -12,8 +12,8 @@
 extern "C" {
 #endif
 
-#define uint24_t	uint16_t	//FIXME: implement 24 bit arithmetics
-#define int24_t		int16_t		//FIXME: implement 24 bit arithmetics
+#define uint24_t	__uint24	// requires gcc v4.7
+#define int24_t		__int24
 
 #define BEGIN_CRITICAL	asm("cli");
 #define END_CRITICAL	asm("sei");
