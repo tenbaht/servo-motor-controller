@@ -2,9 +2,11 @@
 
 #include "csmc3.h"
 #include "control.h"
+#include "mul.h"
 
 
 static int16_t T2;	// current velocity
+
 
 /**
  * Initialize servo system
@@ -74,8 +76,9 @@ static inline int16_t tap_velocity(int16_t T0)
 {
 	int16_t	Z;
 
-	T0 -= T2 * GaSpd;		// error = desired_value - speed*P1
-	Z = T0*GaTqP + PvInt*GaTqI;	// Z = Pval*error + Ival*Isum
+	T0 -= muls1616(T2, GaSpd);	// error = desired_value - speed*P1
+	Z = muls1616(T0,GaTqP)
+	  + muls1616(PvInt,GaTqI);	// Z = Pval*error + Ival*Isum
 
 	// torque limit (P4)
 	clear_flag(5);
@@ -116,7 +119,7 @@ static inline int16_t tap_velocity(int16_t T0)
 
 static inline int16_t tap_torque(int16_t T0)
 {
-	return (T0 + T2*GaEG);		// T0 + speed*P5
+	return (T0 + muls1616(T2,GaEG));	// T0 + speed*P5
 }
 
 
@@ -231,8 +234,8 @@ void servo_operation()
 		default: tap_voltage(T0);
 	}
 */
-//	if (Mode>=3) T0 = tap_position();
-//	if (Mode>=2) T0 = tap_velocity(T0);
-//	if (Mode>=1) T0 = tap_torque(T0);
+	if (Mode>=3) T0 = tap_position();
+	if (Mode>=2) T0 = tap_velocity(T0);
+	if (Mode>=1) T0 = tap_torque(T0);
 	tap_voltage(T0);
 }
