@@ -4,6 +4,7 @@
 #include "cli.h"
 #include "uart.h"
 #include "control.h"
+#include "eeprom.h"
 
 
 static const char m_prompt[] PROGMEM = "\r\n%";
@@ -97,8 +98,35 @@ void task_cli()
 
 void do_jump(){Serial_print_s(__func__);}
 void do_go(){Serial_print_s(__func__);}
-void do_reep(){Serial_print_s(__func__);}
-void do_weep(){Serial_print_s(__func__);}
+
+
+/**
+ * Load parameters from EEPROM
+ *
+ */
+void do_reep()
+{
+	if (get_val() || ((uint24_t) val>= EEBANKS)) {
+		cmd_err();
+		return;
+	}
+	load_parms(val);
+}
+
+
+/**
+ * Save parameters into EEPROM
+ *
+ */
+void do_weep()
+{
+	if (get_val() || ((uint24_t) val>= EEBANKS)) {
+		cmd_err();
+		return;
+	}
+	save_parms(val);
+}
+
 
 /**
  * print the current location
@@ -146,14 +174,11 @@ static void cmd_err(void)
 
 static void do_mode(void)	//:	; Change servo mode
 {
-//	if (!get_val()) {cmd_err(); return;}
-//	init_servo(val);
-
 	if (get_val()) {
 		cmd_err();
-	} else {
-		init_servo(val);
+		return;
 	}
+	init_servo(val);
 }
 
 
@@ -161,6 +186,7 @@ static void do_sub(void)		//:	; Set subcommand reg.
 {
 	ds_set(&CtSub);
 }
+
 
 static void do_parm(void)		// Set parameters
 {
