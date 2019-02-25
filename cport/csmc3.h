@@ -7,6 +7,7 @@
 #define _CSCM3_H_
 
 #include <stdint.h>
+#include <avr/io.h>
 
 #ifdef __cplusplus
 extern "C" {

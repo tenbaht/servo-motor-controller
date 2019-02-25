@@ -4,18 +4,16 @@
 #include "cli.h"
 #include "uart.h"
 #include "control.h"
+#include "motion-planning.h"
 #include "eeprom.h"
 
 
 static const char m_prompt[] PROGMEM = "\r\n%";
 static const char m_error[] PROGMEM = "\n?";
 
-static void cmd_err(void);
-
-
 
 static void do_jump();
-static void do_go();
+//static void do_go();
 static void do_loc();
 static void do_reep();
 static void do_weep();
@@ -28,11 +26,7 @@ static void ds_set(int16_t *ptr);
 void dp_dec(int16_t v);	// print an integer value (should be 24 bit)
 uint8_t get_line(void);
 
-
-// getval(): 0=kein Wert, 1=Wert ok. Wert ist in val
-uint8_t get_val();
 int24_t val;
-
 
 uint8_t LineBuf[20];	// Command line input buffer
 uint8_t *buf;		// read pointer into line buffer
@@ -96,7 +90,7 @@ void task_cli()
 */
 
 
-void do_go(){Serial_print_s(__func__);}
+//void do_go(){Serial_print_s(__func__);}
 
 
 /**
@@ -169,8 +163,6 @@ static void do_loc()
 
 void do_jump()
 {
-//	Serial_print_s(__func__);
-
 	if (get_val()) {
 		cmd_err();
 		return;
@@ -179,7 +171,8 @@ void do_jump()
 }
 
 
-static void cmd_err(void)
+
+void cmd_err(void)
 {
 	dp_str(m_error);
 }
