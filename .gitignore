@@ -3,6 +3,9 @@
 *.bak
 # developer notes and scratchpad directory
 notes/
+# quality control files
+*.bin
+*.disass
 # assember generated files
 build*/
 *.cof
