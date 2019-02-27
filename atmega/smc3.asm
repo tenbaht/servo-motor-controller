@@ -451,7 +451,7 @@ do_jump:
 
 
 ;------------------------------------------------;
-; Go at trapezoidal/rectanguler velocity profile.
+; Go at trapezoidal/rectangular velocity profile.
 ;
 ; local variables: (24 bit, LSB first in list)
 ; T0H:T2	current position (kind of loop variable) (s24.8)
@@ -485,7 +485,7 @@ do_go:
 	breq	dg_1		;/
 	rjmp	cmd_err
 
-; Rectanguler velocity profile
+; Rectangular velocity profile
 dg_1:	 rcall	get_val		;BL:AL = target position
 	rjeq	cmd_err		;/
 	pushw	A
@@ -573,7 +573,7 @@ b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 ; // up ramp width was (cur_pos-start_pos)
 ; // down ramp beginns at target - up_ramp_width = target - (cur-start)
 ; EL:D ramp_point = start_pos - cur_pos + target_pos
-	movw	DL, T4L		;Calcurate down ramp point
+	movw	DL, T4L		;Calculate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
 	sbc	DH, T2L		;
@@ -1149,7 +1149,7 @@ muls1616:
 
 b60:	subw	C, C	; clear high 16bit.
 	ldi	DL, 17	; DL = loop count
-b61:	brcc	b62	; ---- calcurating loop
+b61:	brcc	b62	; ---- calculating loop
 	addw	C, A	;
 b62:	rorw	C	;
 	rorw	B	;

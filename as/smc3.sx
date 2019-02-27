@@ -448,7 +448,7 @@ do_jump:
 
 
 ;------------------------------------------------;
-; Go at trapezoidal/rectanguler velocity profile.
+; Go at trapezoidal/rectangular velocity profile.
 
 do_go:
 	ldiw	ZL, CtPos	;Z -> Position command reg.
@@ -465,7 +465,7 @@ do_go:
 	breq	dg_1		;/
 	rjmp	cmd_err
 
-; Rectanguler velocity profile
+; rectangular velocity profile
 dg_1:	 rcall	get_val		;BL:AL = target position
 	rjeq	cmd_err		;/
 	pushw	A
@@ -531,7 +531,7 @@ b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cpc	CH, _0		;
 	brlo	dg_ul		;/
 
-	movw	DL, T4L		;Calcurate down ramp point
+	movw	DL, T4L		;Calculate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
 	sbc	DH, T2L		;
@@ -953,7 +953,7 @@ muls1616:
 
 b60:	subw	C, C	; clear high 16bit.
 	ldi	DL, 17	; DL = loop count
-b61:	brcc	b62	; ---- calcurating loop
+b61:	brcc	b62	; ---- calculating loop
 	addw	C, A	;
 b62:	rorw	C	;
 	rorw	B	;
