@@ -1034,12 +1034,11 @@ b81:	cpi	AL,' '		; SP
 ; Call: Z = top of the string (ASCIZ)
 ; Ret:  Z = next string
 
+b82:	 rcall	xmit
 dp_str:	lpm	AL, Z+
 	tst	AL
 	brne	b82
 	ret
-b82:	 rcall	xmit
-	rjmp	dp_str
 
 
 ;--------------------------------------;
