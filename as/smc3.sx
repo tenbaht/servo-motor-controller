@@ -16,6 +16,8 @@ SYSCLK	= 16000000	;System clock
 BPS	= 38400		;UART bps
 TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
 
+#define USE_DECAY	// let the I value decay after reaching a steady state
+
 #define	_0	r15	//;Permanent zero register
 #define	_PvEnc	r14	//;Previous encoder signal A/B
 #define	_PvDir	r13	//;Previous direction
@@ -775,8 +777,33 @@ b21:	tst	T0H		;PvInt += T0, with anti-windup
 b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
 b23:	lddw	A, Y+iPvInt	;
-	addw	A, T0		;
-	stdw	Y+iPvInt, A	;/
+#if defined(USE_DECAY)
+;-- addition: decay for the integral value after steady state is reached
+;   (useful for static positioning applications like XY-tables)
+; if (T0 || T2) A+=T0
+; else {B=(A>>6); A-=B}
+
+	mov	BL, T0L		; check for (T0==0)&&(T2==0)
+	or	BL, T0H
+	or	BL, T2L
+	or	BL, T2H
+	brne	b28
+	movw	BL, AL		; B = A>>5
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	subw	A, B		; A -= B;
+	rjmp	b29
+#endif
+b28:	addw	A, T0		;
+b29:	stdw	Y+iPvInt, A	;/
 
 b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter

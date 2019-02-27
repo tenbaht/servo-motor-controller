@@ -13,6 +13,8 @@
 .equ	BPS	= 38400		;UART bps
 .equ	TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
 
+.equ	USE_DECAY = 1	; let the I value decay after reaching a steady state
+
 .def	_0	= r15	;Permanent zero register
 .def	_PvEnc	= r14	;Previous encoder signal A/B
 .def	_PvDir	= r13	;Previous direction
@@ -914,6 +916,7 @@ b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
 ; PvInt += T0
 b23:	lddw	A, Y+iPvInt	;
+.ifdef USE_DECAY
 ;-- addition: decay for the integral value after steady state is reached
 ;   (useful for static positioning applications like XY-tables)
 ; if (T0 || T2) A+=T0
@@ -937,7 +940,7 @@ b23:	lddw	A, Y+iPvInt	;
 	ror	BL
 	subw	A, B		; A -= B;
 	rjmp	b29
-;--
+.endif
 b28:	addw	A, T0		;
 b29:	stdw	Y+iPvInt, A	;/
 ; if (flags(5) || flags(6)) {
