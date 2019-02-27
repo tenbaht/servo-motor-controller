@@ -16,6 +16,8 @@ SYSCLK	= 16000000	;System clock
 BPS	= 38400		;UART bps
 TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
 
+#define USE_DECAY	// let the I value decay after reaching a steady state
+
 #define	_0	r15	//;Permanent zero register
 #define	_PvEnc	r14	//;Previous encoder signal A/B
 #define	_PvDir	r13	//;Previous direction
@@ -448,7 +450,7 @@ do_jump:
 
 
 ;------------------------------------------------;
-; Go at trapezoidal/rectanguler velocity profile.
+; Go at trapezoidal/rectangular velocity profile.
 
 do_go:
 	ldiw	ZL, CtPos	;Z -> Position command reg.
@@ -465,7 +467,7 @@ do_go:
 	breq	dg_1		;/
 	rjmp	cmd_err
 
-; Rectanguler velocity profile
+; rectangular velocity profile
 dg_1:	 rcall	get_val		;BL:AL = target position
 	rjeq	cmd_err		;/
 	pushw	A
@@ -531,7 +533,7 @@ b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cpc	CH, _0		;
 	brlo	dg_ul		;/
 
-	movw	DL, T4L		;Calcurate down ramp point
+	movw	DL, T4L		;Calculate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
 	sbc	DH, T2L		;
@@ -775,8 +777,33 @@ b21:	tst	T0H		;PvInt += T0, with anti-windup
 b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
 b23:	lddw	A, Y+iPvInt	;
-	addw	A, T0		;
-	stdw	Y+iPvInt, A	;/
+#if defined(USE_DECAY)
+;-- addition: decay for the integral value after steady state is reached
+;   (useful for static positioning applications like XY-tables)
+; if (T0 || T2) A+=T0
+; else {B=(A>>6); A-=B}
+
+	mov	BL, T0L		; check for (T0==0)&&(T2==0)
+	or	BL, T0H
+	or	BL, T2L
+	or	BL, T2H
+	brne	b28
+	movw	BL, AL		; B = A>>5
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	asr	BH
+	ror	BL
+	subw	A, B		; A -= B;
+	rjmp	b29
+#endif
+b28:	addw	A, T0		;
+b29:	stdw	Y+iPvInt, A	;/
 
 b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
@@ -953,7 +980,7 @@ muls1616:
 
 b60:	subw	C, C	; clear high 16bit.
 	ldi	DL, 17	; DL = loop count
-b61:	brcc	b62	; ---- calcurating loop
+b61:	brcc	b62	; ---- calculating loop
 	addw	C, A	;
 b62:	rorw	C	;
 	rorw	B	;
@@ -1007,12 +1034,11 @@ b81:	cpi	AL,' '		; SP
 ; Call: Z = top of the string (ASCIZ)
 ; Ret:  Z = next string
 
+b82:	 rcall	xmit
 dp_str:	lpm	AL, Z+
 	tst	AL
 	brne	b82
 	ret
-b82:	 rcall	xmit
-	rjmp	dp_str
 
 
 ;--------------------------------------;

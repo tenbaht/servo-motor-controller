@@ -13,6 +13,8 @@
 .equ	BPS	= 38400		;UART bps
 .equ	TL_TIME = 1500		;Error timer (tError(ms)=TL_TIME/3)
 
+.equ	USE_DECAY = 1	; let the I value decay after reaching a steady state
+
 .def	_0	= r15	;Permanent zero register
 .def	_PvEnc	= r14	;Previous encoder signal A/B
 .def	_PvDir	= r13	;Previous direction
@@ -311,16 +313,22 @@ do_sub:	; Set subcommand reg.
 	rjmp	ds_set
 
 do_parm:	; Set parameters
+; if (get_val()) goto cmd_err;
 	 rcall	get_val
 	breq	cmd_err
+; if (val >= N_PARM) goto cmd_err;
 	cpi	AL, N_PARM
 	brcc	cmd_err
+; Y = &Parms[val];
 	lsl	AL
 	mov	YL, AL
 	clr	YH
 	subiw	Y, -Parms
+; c = get_val();
 ds_set:	 rcall	get_val
+; if (c == 2) goto cmd_err;
 	brcs	cmd_err
+; if (c == 1) {
 	brne	ds_st
 	ldi	AL, 0x0a
 	 rcall	xmit
@@ -335,6 +343,8 @@ ds_set:	 rcall	get_val
 	 rcall	get_val
 	brcs	cmd_err
 	breq	b03
+; }
+; *Y = A;
 ds_st:	cli
 	stdw	Y+0, A
 	sei
@@ -427,6 +437,9 @@ b08:	 rcall	receive		;Break if any key was pressed
 ;------------------------------------------------;
 ; Change position command reg. immediataly.
 
+; if (!get_val()) goto cmd_err;
+; CtPos = val;
+; goto main;
 do_jump:
 	 rcall	get_val
 	rjeq	cmd_err
@@ -440,8 +453,25 @@ do_jump:
 
 
 ;------------------------------------------------;
-; Go at trapezoidal/rectanguler velocity profile.
+; Go at trapezoidal/rectangular velocity profile.
+;
+; local variables: (24 bit, LSB first in list)
+; T0H:T2	current position (kind of loop variable) (s24.8)
+; T4:T6L	start position (s24)
+; A:BL		target position (s24)
+; BH:C		velocity (u16.8)
+; D:EL		next important point on ramp (midpoint, start of end ramp)
+; Tflag		direction of movement (b1)
 
+; 		T4:T6L = CtPos;	// s24
+; cur_pos T0:T2  = CtPos << 8;	// s32 (wirklich?)
+; cur_pos T0H:T2 = CtPos;	// s24 (wirklich?)
+; if (get_val())
+; {
+;   if (val==0) goto dg_0();
+;   if (val==1) goto dg_1();
+; }
+; goto cmd_err;
 do_go:
 	ldiw	Z, CtPos	;Z -> Position command reg.
 	lddw	T4, Z+0		;T6L:T4 = start position
@@ -457,7 +487,7 @@ do_go:
 	breq	dg_1		;/
 	rjmp	cmd_err
 
-; Rectanguler velocity profile
+; Rectangular velocity profile
 dg_1:	 rcall	get_val		;BL:AL = target position
 	rjeq	cmd_err		;/
 	pushw	A
@@ -480,24 +510,35 @@ b010:	 rcall	dg_add		;---Constant velocity loop
 	rjmp	dg_end		;/
 
 ; Trapezoidal velocity profile
+; if (!get_val()) goto cmd_err;
 dg_0:	 rcall	get_val		;BL:A = target posision
 	rjeq	cmd_err		;/
+; Tflag = (val<start_pos)//(val<T4:T6L)	// Tflag = direction of movement
+; // 0 = forward (positive), 1 = backward (negative)
 	cpw	A, T4		;T = direction
 	cpc	BL, T6L		;
 	clt			;
 	brge	b011		;
 	set			;/
+; // BH:C is start velocity (24 bit)
+; velocity = 0;
 b011:	clr	r0		;
 	clr	BH		;CL:BH = start velocity
 	clrw	C		;/
 
+; do {
+;   velocity += MvAcc;
 dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	add	BH, DL		;Increase velocity
 	lds	DL, MvAcc+1	;
 	adc	CL, DL		;
 	adc	CH, _0		;/
+;   if (!dg_add()) goto dg_end;
 	 rcall	dg_add
 	brge	dg_end
+;   // A:BL is target position
+;   // T4:T6L is start position
+;   D:EL = (target - start)/2 + start;
 	movw	DL, AL		;Check current position has passed half of distance.
 	mov	EL, BL		;If passed, enter to down ramp.
 	sub	DL, T4L		;
@@ -507,42 +548,63 @@ dg_ul:	lds	DL, MvAcc+0	;---Up ramp loop
 	rorw	D		;
 	addw	D, T4		;
 	adc	EL, T6L		;
+
+;   if (direction) {	// if (Tflag) {
 	brts	b40		;
+;     if (cur_pos >= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 	cp	T0H, DL		;
 	cpc	T2L, DH		;
 	cpc	T2H, EL		;
 	brge	dg_de		;
 	rjmp	b41		;
+;   } else {
+;     if (cur_pos <= midpoint) goto dg_de;  //if (T0H:T2 >= EL:D) goto dg_de
 b40:	cp	DL, T0H		;
 	cpc	DH, T2L		;
 	cpc	EL, T2H		;
 	brge	dg_de		;/
+;   }
+; } while (velocity < MvSpd);
 b41:	ldsw	D, MvSpd	;Has current velocity reached P6?
 	cp	BH, DL		;If reached, enter constant velocity mode.
 	cpc	CL, DH		;
 	cpc	CH, _0		;
 	brlo	dg_ul		;/
 
-	movw	DL, T4L		;Calcurate down ramp point
+; // Calculate down ramp point:
+; // up ramp width was (cur_pos-start_pos)
+; // down ramp beginns at target - up_ramp_width = target - (cur-start)
+; EL:D ramp_point = start_pos - cur_pos + target_pos
+	movw	DL, T4L		;Calculate down ramp point
 	mov	EL, T6L		;
 	sub	DL, T0H		;
 	sbc	DH, T2L		;
 	sbc	EL, T2H		;
 	addw	D, A		;
 	adc	EL, BL		;/ EL:DL = s.p. - c.p. + t.p.
+; do {
+;   dg_add();
 dg_cl:	 rcall	dg_add		;---Constant velocity loop
+;   if (direction==0) {		//Tflag==0) {
 	brts	b42
+;     if (cur_pos >= ramp_point) break; {// if (T0H:T2 >= EL:D) break;
 	cp	T0H, DL
 	cpc	T2L, DH
 	cpc	T2H, EL
 	brge	dg_de
 	rjmp	dg_cl
+;   } else {
+;     if (ramp_point >= cur_pos) break; {// if (EL:D < T0H:T2) goto dg_cl
 b42:	cp	DL, T0H
 	cpc	DH, T2L
 	cpc	EL, T2H
 	brlt	dg_cl
-
+; } // do
+; dg_add();
 dg_de:	 rcall	dg_add
+; while ((velocity-=MvAcc) >= 0) {
+;   if (dg_add()==0) break;
+; }
 dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	sub	BH, DL		;Decrese velocity
 	lds	DL, MvAcc+1	;
@@ -552,10 +614,22 @@ dg_dl:	lds	DL, MvAcc+0	;---Down ramp loop
 	 rcall	dg_add
 	brlt	dg_dl
 
+; block_irq();
+; CtPos = target_pos;
 dg_end:				; End of action
 	cli
 	stdw	Z+0, A
 	std	Z+2, BL
+; while (block_irq(), Pos!=target_pos) {
+;   allow_irq();
+;   if (receive()
+
+; // irq blocking is not exactly right in the C translation
+; do {
+;   block_irq();
+;   if (cur_pos == target_pos) break;
+;   allow_irq();
+; } while (receive()==0);
 dge_lp:	cli			; Wait until position stabled
 	cpw	_Pos, A
 	cpc	_PosX, BL
@@ -565,10 +639,19 @@ dge_lp:	cli			; Wait until position stabled
 	 rcall	receive
 	pop	AL
 	breq	dge_lp
+; goto main;
 b43:	rjmp	main
 
 
-
+;
+; do one 1ms step with the current velocity
+;
+; wait for 1kHz time interval without any torque flags set.
+; advance cur_pos by (velocity)
+; if that does not overrun the target position, advance CtPos by (velocity)
+;
+; returns: s-flag=1, N^V=1: all ok
+;          N^V=0: overun the target position (brge will catch this)
 dg_add:
 	cbr	_Flags, bit7	;Wait for 1kHz time interval
 b44:	push	AL		;
@@ -583,30 +666,42 @@ b45:	pop	AL		;
 	rjmp	dg_add		;
 	sbrc	_Flags, 5	;
 	rjmp	dg_add		;/
+; if (direction == 0) {		// if (Tflag==0) {
+;   cur_pos += velocity;	//T2:T0 += BH:C
 	brts	b46		;Increase commanded point by current velocity
 	add	T0L, BH		;
 	adc	T0H, CL		;
 	adc	T2L, CH		;
 	adc	T2H, CH		;
+;   if (cur_pos >= target) return 0;
 	cp	T0H, AL		;
 	cpc	T2L, AH		;
 	cpc	T2H, BL		;
 	brge	dga_ov		;
 	rjmp	b47		;
+; } else {
+;   cur_pos -= velocity;	//T2:T0 -= C:BH
 b46:	sub	T0L, BH		;
 	sbc	T0H, CL		;
 	sbc	T2L, CH		;
 	sbc	T2H, CH		;
+;   if (cur_pos <= target) return 0;
 	cp	AL, T0H		;
 	cpc	AH, T2L		;
 	cpc	BL, T2H		;
 	brge	dga_ov		;/
+; }
+; BEGIN_CRITICAL
+; CtPos = cur_pos >> 8;
+; END_CRITICAL;
 b47:	cli
 	std	Z+0, T0H
 	stdw	Z+1, T2
 	sei
+; return (1);
 	ses
 dga_ov:	ret
+; }
 
 dga_stop:
 	pop	AL
@@ -641,20 +736,48 @@ b012:	st	Y+, _0		;
 ;----------------------------------------------------------;
 ; 83kHz Position capture and servo operation interrupt
 
+
+; part 1: position capture
+;
+
+; input: PIND
+; sideeffects/global variables:
+; - PvEnc: previous A/B signal (r/w)
+; - Pos/PosX: update the current position (r/w)
+; - saved registers: T0L, SREG, Z (left on stack)
+; modified registers: Z
+
 background:
 	push	T0L
 	pushw	Z
 	in	T0L, SREG		;Save flags
 
+; ZL = PvEnc;
 	mov	ZL, _PvEnc		;ZL[1:0] = previous A/B signal
+; PvEnc = swap(PIND);
 	in	_PvEnc, PIND		;Sample A/B signal into _PvEnc[1:0]
 	swap	_PvEnc			;/
+; if (PvEnc & 2) PvEnc ^= 1;
 	ldi	ZH, 1			;Convert it to sequencial number.
 	sbrc	_PvEnc, 1		;
 	eor	_PvEnc, ZH		;/
+; ZL = (ZL - PvEnc) & 3;
 	sub	ZL, _PvEnc		;Decode motion
 	andi	ZL, 3			;/
+; if (ZL) {
 	breq	enc_zr			;-> Not moved
+;   if (ZL == 3) {
+;     // enc_rev
+;     PvDir = -1;
+;     Pos--;
+;   } else if (ZL == 1) {
+;     // enc_fwd
+;     PvDir = 1;
+;     Pos++;
+;   } else {
+;     // missing code recovery
+;     Pos += 2*PvDir;
+;   }
 	cpi	ZL, 3			;
 	breq	enc_rev			;-> -1 count
 	cpi	ZL, 1			;
@@ -666,10 +789,14 @@ background:
 	rjmp	enc_add
 enc_rev:ldiw	Z, -1
 	rjmp	b013
+;     } // if (ZL!=1)
 enc_fwd:ldiw	Z, 1
 b013:	mov	_PvDir, ZL
 enc_add:addw	_Pos, Z
 	adc	_PosX, ZH
+; } // if (ZL)
+
+; if (--CtDiv) return;
 enc_zr:
 	dec	_CtDiv		;Decrement 1/83 divider
 	rjne	bgnd_exit	;If not overflow, exit interrupt routine.
@@ -677,6 +804,7 @@ enc_zr:
 ; End of 83 kHz position captureing process. Follows are 1kHz servo
 ; operation. It will be interrupted itself, but will not be re-entered.
 
+; CtDiv = 83;
 	ldi	ZL, 83		;Re-initialize 1/83 divider
 	mov	_CtDiv, ZL	;/
 	sei			;Enable interrupts
@@ -691,6 +819,8 @@ enc_zr:
 
 	sbr	_Flags, bit7	; 1kHz interrupt flag
 
+; T2 = Pos - PvPos;
+; PvPos = Pos;
 	lddw	T2, Y+iPvPos	;Detect velocity
 	cli			;
 	subw	T2, _Pos	;
@@ -698,6 +828,7 @@ enc_zr:
 	sei			;
 	negw	T2		;/ T2 = velocity
 
+;
 	ldd	AL, Y+iMode	;Branch by servo mode
 	cpi	AL, 3		;Mode3?
 	breq	tap_position	;/
@@ -717,6 +848,8 @@ tap_position:
 	sbc	BH, _PosX	;
 	sei			;BH:T0 = position error
 
+; if (pos_error >= LimSpd) pos_error = LimSpd;
+; else if (pos_error <= -LimSpd) pos_error = -LimSpd;
 	lddw	A, Y+iLimSpd	;Velocity limit (P0)
 	clr	BL		;
 	cpw	T0, A		;
@@ -729,29 +862,43 @@ tap_position:
 	brge	tap_velocity	;
 b10:	movw	T0L, AL		;T0 = velocity command
 
+; output a velocity value (mode 2)
+;
 
+; input:
+; - T0: desired velocity value
+; - T2: current velocity (in pules/ms)
+; - Y: pointer to motor parameter block
+; output:
+; - T0: next torque value
+; modified registers: A, B, Z
 tap_velocity:
+; T0 -= speed{T2} * P1
 	movw	AL, T2L		;Velocity loop gain (P1)
 	lddw	B, Y+iGaSpd	;
 	 rcall	muls1616	;B = scaled velocity
 	subw	T0, B		;T0 = velocity error
 
+; Z = T0 * GaTqP			; P term P2
 	movw	AL, T0L		;Velocity error P-gain (P2)
 	lddw	B, Y+iGaTqP	;
 	 rcall	muls1616	;
 	movw	ZL, BL		;Z = P term;
 
+; Z += PvInt * GaTqI			; I term P3
 	lddw	A, Y+iPvInt	;Velocity error I-gain (P3)
 	lddw	B, Y+iGaTqI	;
 	 rcall	muls1616	;
 	addw	Z, B		;Z += I term;
 
+; if (Z>= LimTrq) {Z=LimTrq; set_flag(6);}	;Torque limit P4 (LimTrq)
 	cbr	_Flags, bit6+bit5;Torque limit (P4)
 	lddw	B, Y+iLimTrq	;
 	cpw	Z, B		;
 	brlt	b20		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit6	;
+; if (Z< -LimTrq) {Z=-LimTrq; set_flag(5);}
 b20:	neg	BL		;
 	com	BH		;
 	cpw	Z, B		;
@@ -759,6 +906,7 @@ b20:	neg	BL		;
 	movw	ZL, BL		;
 	sbr	_Flags, bit5	;/
 
+; if ( ((T0<0)&&!flag(5)) || ((T0>=0)&&!flag(6)) ) PvInt += T0;
 b21:	tst	T0H		;PvInt += T0, with anti-windup
 	brmi	b22		;
 	sbrc	_Flags, 6	;
@@ -766,12 +914,49 @@ b21:	tst	T0H		;PvInt += T0, with anti-windup
 	rjmp	b23		;
 b22:	sbrc	_Flags, 5	;
 	rjmp	b24		;
+; PvInt += T0
 b23:	lddw	A, Y+iPvInt	;
-	addw	A, T0		;
-	stdw	Y+iPvInt, A	;/
+.ifdef USE_DECAY
+;-- addition: decay for the integral value after steady state is reached
+;   (useful for static positioning applications like XY-tables)
+; if (T0 || T2) A+=T0
+; else {B=(A>>6); A-=B}
 
+	mov	BL, T0L		; check for (T0==0)&&(T2==0)
+	or	BL, T0H
+	or	BL, T2L
+	or	BL, T2H
+	brne	b28
+	movw	BL, AL		; B = A>>5
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	asr	BH,1
+	ror	BL
+	subw	A, B		; A -= B;
+	rjmp	b29
+.endif
+b28:	addw	A, T0		;
+b29:	stdw	Y+iPvInt, A	;/
+; if (flags(5) || flags(6)) {
+;   led_on(LED_TORQUE);
+; } else {
+;   led_off(LED_TORQUE);
+;   if (OvTmr-1)>0) {
+;     OvTmr--;
+;     if (OvTmr >= TL_TIME) goto servo_error;
+;   }
+; }
+; T0 = Z
+;
 b24:	mov	AL, _Flags	;Check torque limiter timer
 	andi	AL, bit6+bit5	; OvTmr is increased by 3 when torque limitter
+;AL is overwritten right away, but the CPU flags survive
 	lddw	A, Y+iOvTmr	; works, decreased by 1 when no torque limit.
 	breq	b25		; When the value reaches TL_TIME, servo turns
 	led_on	LED_TORQUE	; off and goes error state.
@@ -787,7 +972,17 @@ b26:	stdw	Y+iOvTmr, A	;
 
 b27:	movw	T0L, ZL		;T0 = torque command
 
-
+; output a torque/current value (mode 1)
+;
+; current_PWM{T0} += speed{T2}*P5;
+;
+; input:
+; - T2: current velocity (in pules/ms)
+; - Y: pointer to motor parameter block
+; - T0: current PWM value (left over from the last round)
+; output:
+; - T0: next PWM value
+; modified registers: A, B
 tap_torque:
 	movw	AL, T2L		;EG compensation (P5)
 	lddw	B, Y+iGaEG	;
@@ -795,6 +990,18 @@ tap_torque:
 	addw	T0, B		;T0 = voltage command
 
 
+; output a PWM value (mode 0)
+;
+; clip T0 to [-240;240]
+; OCR1A = (T0/2) + 120;
+; OCR1B = 120 - (T0/2);
+;
+; input:
+; - T0: value to output.
+;
+; valid outputs and side effects:
+;
+; modified registers: A
 tap_voltage:
 	ldiw	A, 240		;Clip output voltage between -240 and +240.
 	cpw	T0, A		; Limit minimum duty ratio to 15/16 for bootstrap
@@ -945,7 +1152,7 @@ muls1616:
 
 b60:	subw	C, C	; clear high 16bit.
 	ldi	DL, 17	; DL = loop count
-b61:	brcc	b62	; ---- calcurating loop
+b61:	brcc	b62	; ---- calculating loop
 	addw	C, A	;
 b62:	rorw	C	;
 	rorw	B	;
@@ -963,7 +1170,10 @@ b63:	ret
 
 ;--------------------------------------;
 ; Input a command line into LineBuf.
-
+;
+; returns:
+; - BH: number of char in buffer
+; - X: pointer to LineBuf
 get_line:
 	ldiw	X,LineBuf
 	ldi	BH,0
@@ -999,12 +1209,11 @@ b81:	cpi	AL,' '		; SP
 ; Call: Z = top of the string (ASCIZ)
 ; Ret:  Z = next string
 
+b82:	 rcall	xmit
 dp_str:	lpm	AL, Z+
 	tst	AL
 	brne	b82
 	ret
-b82:	 rcall	xmit
-	rjmp	dp_str
 
 
 ;--------------------------------------;
@@ -1020,24 +1229,40 @@ b82:	 rcall	xmit
 ;  Negative:   "-125000"
 
 get_val:
+; flag_neg = 0;	// use T as flag for negative value
 	clt
+; val = 0;
 	clr	AL
 	clr	AH
 	clr	BL
+; do {
+;   BH = *X++;
 b83:	ld	BH,X+
+;   if (BH < ' ') return (c1z0);	// return empty line
 	cpi	BH,' '
 	brcs	gd_n
 	breq	b83
+; } while (BH == ' ');			// ignore spaces
+; if (BH == '-') {
+;	flag_neg = 1;
+;	BH = *X++;
+; }
 	cpi	BH,'-'
 	brne	b84
 	set
-gd_l:	ld	BH,X+
+gd_l:	ld	BH,X+		; in C this would be at the end of loop
+; do {
+;   if (BH <= ' ') goto gd_e;	// found end of number, return success
 b84:	cpi	BH,' '+1
 	brcs	gd_e
+;   BH -= '0';
 	subi	BH,'0'
-	brcs	gd_x
+;   if (BH < 0) goto gd_x;	// return syntax error
+	brcs	gd_x	; could be left out, this is covered by the next compare.
+;   if (BH >= 10) goto gd_x;	// return syntax error
 	cpi	BH,10
 	brcc	gd_x
+;   val = val*10 + BH;		// this loop is a 24x8 bit multiplication
 	ldi	CL, 25
 	ldi	CH, 10
 	sub	r0, r0
@@ -1053,9 +1278,17 @@ b86:	dec	CL
 	adc	AH, _0
 	adc	BL, _0
 	rjmp	gd_l
+;   BH = *X++;		// implemented in assembler at the beginning
+; } while (1);
+; return (z1c1);	// return value for error
 gd_x:	sec
 	sez
 	ret
+; X--
+; if (flag_neg) {
+;	val = -val;
+; }
+; return (c0);		// return value for success
 gd_e:	sbiw	XL,1
 	brtc	b87
 	com	AL
@@ -1066,6 +1299,8 @@ gd_e:	sbiw	XL,1
 	sbci	BL,-1
 b87:	clc
 	ret
+; X--
+; return (z1c0);	// return value for empty line
 gd_n:	sbiw	XL,1
 	clc
 	sez
@@ -1079,36 +1314,74 @@ gd_n:	sbiw	XL,1
 ; Call: BL:A = 24bit signed value to be displayed
 ; Ret:  BL:A = broken
 
+; This implements the standard algorithmn for unsigned division Q,R=N/D with
+; N and Q both in BL:A, R in BH and D fixed to 10.
+;
+; Q := 0                  -- Initialize quotient and remainder to zero
+; R := 0                     
+; for i := n − 1 .. 0 do  -- Where n is number of bits in N
+;   R := R << 1           -- Left-shift R by 1 bit
+;   R(0) := N(i)          -- Set the least-significant bit of R equal to bit i of the numerator
+;   if R ≥ D then
+;     R := R − D
+;     Q(i) := 1
+;   end
+; end
+
 dp_dec:	ldi	CH,' '
+; CH = ' ';
+; if (val < 0) {
 	sbrs	BL, 7
 	rjmp	b88
+;   val = -val;
 	com	AL
 	com	AH
 	com	BL
 	adc	AL,_0
 	adc	AH,_0
 	adc	BL,_0
+;   CH = '-'
 	ldi	CH,'-'
+; }
+; // convert the value into an ASCII string on the stack
+; T0L = 0;
 b88:	clr	T0L		;digit counter
+; do {
+;   T0L++;
+;   BH = 0;
+;   CL=24;
 b088:	inc	T0L		;---- decimal string generating loop
 	clr	BH		;var1 /= 10;
 	ldi	CL,24		;
+;   do {
+;     var1 *= 2;
 b89:	lslw	A		;
 	rolw	B		;
+;     if ((var1 >> 24) >= 10) {
 	cpi	BH,10		;
 	brcs	b89a		;
+;       var1 -= (10<<24);
+;       var1++;
 	subi	BH,10		;
 	inc	AL		;
+;   } while (--CL);
 b89a:	dec	CL		;
 	brne	b89		;/
-	addi	BH,'0'		;Push the remander (a decimal digit)
+;   push(BH+'0');
+	addi	BH,'0'		;Push the remainder (a decimal digit)
 	push	BH		;/
+; } while (var1);
 	cp	AL,_0		;if(var1 =! 0)
 	cpc	AH,_0		; continue digit loop;
 	cpc	BL,_0		;
 	brne	b088		;/
+; // output the stored string in opposite order
+; xmit(CH);	// sign
 	mov	AL, CH		;Sign
 	 rcall	xmit		;/
+; do {
+;   xmit(pop());
+; } while (--T0L);
 b89b:	pop	AL		;Transmit decimal string
 	 rcall	xmit		;<-- Put a char to memory, console or any other display device
 	dec	T0L		;
@@ -1138,7 +1411,14 @@ b90:
 	ret
 .endif
 
-receive:; Receive a char into AL. (ZR=no data)
+; Receive a char into AL. (ZR=no data)
+;
+; modified regs: AL
+; return status: Z=1: no data, Z=0: data in AL valid
+; global variables:
+;   read: RxBuf: Rp, Wp, Buff
+;   write: Rp
+receive:
 	push	AH
 	pushw	Y
 	ldiw	Y, RxBuf

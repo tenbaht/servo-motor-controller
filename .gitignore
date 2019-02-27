@@ -1,10 +1,19 @@
 # backup files
 *~
 *.bak
+# developer notes and scratchpad directory
+notes/
+# quality control files
+*.bin
+*.disass
 # assember generated files
-build/
+build*/
 *.cof
 *.hex
 *.lst
 *.map
 *.obj
+*.d
+*.i
+*.o
+*.s
